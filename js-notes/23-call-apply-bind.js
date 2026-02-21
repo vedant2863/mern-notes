@@ -11,69 +11,69 @@
  *  functions — all essential patterns in real codebases.
  * ============================================================
  *
- *  STORY: Think of functions as freelance Pandits for hire.
- *  With call() and apply() you invite Pandit ji for a one-time
- *  puja — you hand him a household (thisArg) and he performs
- *  the ritual immediately. With bind() Pandit ji signs a
+ *  STORY: Think of functions as freelance chefs for hire.
+ *  With call() and apply() you invite Chef sahab for a one-time
+ *  catering gig — you hand him a kitchen (thisArg) and he
+ *  cooks the dish immediately. With bind() Chef sahab signs a
  *  permanent contract: a brand-new function is returned that
- *  will ALWAYS perform puja for that family, no matter who
- *  calls him later.
+ *  will ALWAYS cook for that kitchen, no matter who calls
+ *  him later.
  * ============================================================
  */
 
 // ============================================================
-//  EXAMPLE 1 — Freelance Pandits: call() and apply()
+//  EXAMPLE 1 — Freelance Chefs: call() and apply()
 // ============================================================
 
 // WHY: Sometimes a function lives on one object but you need
 // it to operate on another. call() and apply() invoke the
 // function immediately with a chosen `this`.
 
-// ----- Our freelance Pandit function -----
-function performPuja(samagri, mantra) {
-  return `${this.name} offers ${samagri} and chants "${mantra}!"`;
+// ----- Our freelance chef function -----
+function cookDish(ingredient, style) {
+  return `${this.name} prepares ${ingredient} in "${style}" style!`;
 }
 
-const sharmaFamily = { name: "Sharma ji" };
-const guptaFamily  = { name: "Gupta ji" };
+const sharmaKitchen = { name: "Sharma ji's Kitchen" };
+const guptaKitchen  = { name: "Gupta ji's Kitchen" };
 
 // ----- call(): arguments listed one by one -----
 console.log("--- call() ---");
-console.log(performPuja.call(sharmaFamily, "ghee and camphor", "Om Namah Shivaya"));
-// Output: Sharma ji offers ghee and camphor and chants "Om Namah Shivaya!"
+console.log(cookDish.call(sharmaKitchen, "paneer and spices", "Mughlai"));
+// Output: Sharma ji's Kitchen prepares paneer and spices in "Mughlai" style!
 
-console.log(performPuja.call(guptaFamily, "flowers and coconut", "Jai Shree Ram"));
-// Output: Gupta ji offers flowers and coconut and chants "Jai Shree Ram!"
+console.log(cookDish.call(guptaKitchen, "dal and rice", "Rajasthani"));
+// Output: Gupta ji's Kitchen prepares dal and rice in "Rajasthani" style!
 
 // ----- apply(): arguments passed as an array -----
 console.log("\n--- apply() ---");
-const guptaSamagri = ["havan samagri and til", "Om Swaha"];
-console.log(performPuja.apply(guptaFamily, guptaSamagri));
-// Output: Gupta ji offers havan samagri and til and chants "Om Swaha!"
+const guptaOrder = ["chole and kulche", "Punjabi Dhaba"];
+console.log(cookDish.apply(guptaKitchen, guptaOrder));
+// Output: Gupta ji's Kitchen prepares chole and kulche in "Punjabi Dhaba" style!
 
 // apply() is handy when you already have arguments in an array.
-const donations = [1100, 2100, 501, 5100, 251];
-console.log("Max donation:", Math.max.apply(null, donations));
-// Output: Max donation: 5100
-// (Modern alternative: Math.max(...donations))
+const bills = [1100, 2100, 501, 5100, 251];
+console.log("Max bill:", Math.max.apply(null, bills));
+// Output: Max bill: 5100
+// (Modern alternative: Math.max(...bills))
 
 // ----- Method borrowing -----
 console.log("\n--- Method borrowing ---");
-const vaidya = {
-  name: "Vaidya Ayurved",
-  heal(ailment) {
-    return `${this.name} treats ${ailment} with herbal remedy`;
+const streetVendor = {
+  name: "Raju Chaat Corner",
+  serve(item) {
+    return `${this.name} serves ${item} with extra masala`;
   },
 };
 
-// Borrow vaidya's method for Sharma family — a one-time job.
-console.log(vaidya.heal.call(sharmaFamily, "the joint pain"));
-// Output: Sharma ji treats the joint pain with herbal remedy
+// Borrow streetVendor's method for Sharma kitchen — a one-time job.
+console.log(streetVendor.serve.call(sharmaKitchen, "pani puri"));
+// Output: Sharma ji's Kitchen serves pani puri with extra masala
 
-// The freelance pandit (heal) temporarily worked for Sharma ji
-// but still belongs to the vaidya.
-console.log(vaidya.heal("the chronic cough"));
-// Output: Vaidya Ayurved treats the chronic cough with herbal remedy
+// The freelance chef (serve) temporarily worked for Sharma ji
+// but still belongs to the street vendor.
+console.log(streetVendor.serve("dahi bhalla"));
+// Output: Raju Chaat Corner serves dahi bhalla with extra masala
 
 
 // ============================================================
@@ -85,13 +85,13 @@ console.log(vaidya.heal("the chronic cough"));
 // for callbacks (event handlers, setTimeout, etc.) where you
 // need the context to stick.
 
-const panditNetwork = {
-  name: "Kashi Pandit Sangh",
-  motto: "Dharma and Devotion",
+const cateringNetwork = {
+  name: "Delhi Tiffin Service",
+  motto: "Ghar jaisa khana",
   announce() {
     return `Network: ${this.name} — "${this.motto}"`;
   },
-  recruitAfterDelay() {
+  deliverAfterDelay() {
     // Without bind, setTimeout would lose `this`.
     setTimeout(
       function () {
@@ -101,11 +101,11 @@ const panditNetwork = {
       100
     );
 
-    // With bind, `this` is locked to panditNetwork.
+    // With bind, `this` is locked to cateringNetwork.
     setTimeout(
       function () {
         console.log(`[Bound context] Network: ${this.name}`);
-        // Output: [Bound context] Network: Kashi Pandit Sangh
+        // Output: [Bound context] Network: Delhi Tiffin Service
       }.bind(this),
       200
     );
@@ -113,35 +113,35 @@ const panditNetwork = {
 };
 
 console.log("\n--- bind() basic ---");
-const boundAnnounce = panditNetwork.announce.bind(panditNetwork);
+const boundAnnounce = cateringNetwork.announce.bind(cateringNetwork);
 
 // Even though we detach it, `this` stays locked.
 const detached = boundAnnounce;
 console.log(detached());
-// Output: Network: Kashi Pandit Sangh — "Dharma and Devotion"
+// Output: Network: Delhi Tiffin Service — "Ghar jaisa khana"
 
 console.log("\n--- bind() with setTimeout ---");
-panditNetwork.recruitAfterDelay();
+cateringNetwork.deliverAfterDelay();
 
 // ----- Partial application with bind -----
 console.log("\n--- Partial application ---");
 
-function preparePrasad(baseIngredient, sweet, garnish) {
-  return `Prepared ${baseIngredient} ${sweet} with ${garnish} topping`;
+function prepareDish(base, item, topping) {
+  return `Prepared ${base} ${item} with ${topping} topping`;
 }
 
 // Lock the first argument; the rest are supplied later.
-const prepareGheePrasad = preparePrasad.bind(null, "ghee");
-console.log(prepareGheePrasad("ladoo", "dry fruits"));
-// Output: Prepared ghee ladoo with dry fruits topping
+const prepareButter = prepareDish.bind(null, "butter");
+console.log(prepareButter("chicken", "cream"));
+// Output: Prepared butter chicken with cream topping
 
-console.log(prepareGheePrasad("halwa", "kesar"));
-// Output: Prepared ghee halwa with kesar topping
+console.log(prepareButter("paneer", "kasuri methi"));
+// Output: Prepared butter paneer with kasuri methi topping
 
 // Lock two arguments.
-const prepareGheeLadoo = preparePrasad.bind(null, "ghee", "ladoo");
-console.log(prepareGheeLadoo("silver vark"));
-// Output: Prepared ghee ladoo with silver vark topping
+const prepareButterChicken = prepareDish.bind(null, "butter", "chicken");
+console.log(prepareButterChicken("tandoori masala"));
+// Output: Prepared butter chicken with tandoori masala topping
 
 
 // ============================================================
@@ -162,24 +162,24 @@ console.log(prepareGheeLadoo("silver vark"));
 
 console.log("\n--- Quick demo comparing all three ---");
 
-function reportSeva(location, status) {
+function reportDelivery(location, status) {
   return `${this.name} at ${location}: ${status}`;
 }
 
-const sevadar = { name: "Pandit Shukla" };
+const deliveryBoy = { name: "Raju from Swiggy" };
 
 // call — immediate, comma args
-console.log("call: ", reportSeva.call(sevadar, "Sharma Niwas", "puja complete"));
-// Output: call:  Pandit Shukla at Sharma Niwas: puja complete
+console.log("call: ", reportDelivery.call(deliveryBoy, "Sharma Niwas", "order delivered"));
+// Output: call:  Raju from Swiggy at Sharma Niwas: order delivered
 
 // apply — immediate, array args
-console.log("apply:", reportSeva.apply(sevadar, ["Gupta Bhawan", "havan in progress"]));
-// Output: apply: Pandit Shukla at Gupta Bhawan: havan in progress
+console.log("apply:", reportDelivery.apply(deliveryBoy, ["Gupta Bhawan", "cooking in progress"]));
+// Output: apply: Raju from Swiggy at Gupta Bhawan: cooking in progress
 
 // bind — deferred, returns new function
-const boundReport = reportSeva.bind(sevadar, "Verma Villa");
-console.log("bind: ", boundReport("standing by"));
-// Output: bind:  Pandit Shukla at Verma Villa: standing by
+const boundReport = reportDelivery.bind(deliveryBoy, "Verma Villa");
+console.log("bind: ", boundReport("on the way"));
+// Output: bind:  Raju from Swiggy at Verma Villa: on the way
 
 
 // ============================================================
