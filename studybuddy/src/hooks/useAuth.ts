@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { insforge } from "@/lib/insforge";
 
 interface User {
   id: string;
@@ -15,16 +14,9 @@ export function useAuth() {
 
   const checkSession = useCallback(async () => {
     try {
-      const { data, error } = await insforge.auth.getCurrentUser();
-      if (error || !data?.user) {
-        setUser(null);
-      } else {
-        setUser({
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.profile?.name || data.user.email.split("@")[0],
-        });
-      }
+      const res = await fetch("/api/auth/me");
+      const { user: sessionUser } = await res.json();
+      setUser(sessionUser || null);
     } catch {
       setUser(null);
     } finally {
@@ -37,45 +29,53 @@ export function useAuth() {
   }, [checkSession]);
 
   const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await insforge.auth.signUp({
-      email,
-      password,
-      name,
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
     });
-    if (error) throw new Error(error.message);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Signup failed");
     return data;
   };
 
   const verifyEmail = async (email: string, code: string) => {
-    const { data, error } = await insforge.auth.verifyEmail({
-      email,
-      otp: code,
+    const res = await fetch("/api/auth/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code }),
     });
-    if (error) throw new Error(error.message);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Verification failed");
     return data;
   };
 
   const resendVerification = async (email: string) => {
-    const { data, error } = await insforge.auth.resendVerificationEmail({
-      email,
+    const res = await fetch("/api/auth/resend-verification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
     });
-    if (error) throw new Error(error.message);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to resend");
     return data;
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await insforge.auth.signInWithPassword({
-      email,
-      password,
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
     });
-    if (error) throw new Error(error.message);
-    await checkSession();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Login failed");
+    setUser(data.user);
     return data;
   };
 
   const signOut = async () => {
-    const { error } = await insforge.auth.signOut();
-    if (error) throw new Error(error.message);
+    const res = await fetch("/api/auth/logout", { method: "POST" });
+    if (!res.ok) throw new Error("Logout failed");
     setUser(null);
   };
 

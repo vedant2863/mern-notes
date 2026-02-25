@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback, useRef, use } from "react";
 import { Button, Spinner, Card, CardBody } from "@heroui/react";
 import { useAuth } from "@/hooks/useAuth";
-import { useRealtime } from "@/hooks/useRealtime";
 import { QUIZ_CONFIG } from "@/lib/constants";
 import QuizCard from "@/components/QuizCard";
 import QuizProgress from "@/components/QuizProgress";
@@ -19,7 +18,6 @@ export default function MultiplayerBattlePage({
 }) {
   const { roomCode } = use(params);
   const { user } = useAuth();
-  const { on, publish, ready } = useRealtime(roomCode);
 
   const [room, setRoom] = useState<QuizRoom | null>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
@@ -33,7 +31,7 @@ export default function MultiplayerBattlePage({
 
   const isHost = room?.host_id === user?.id;
 
-  // Fetch room data and detect game start via polling
+  // Fetch room data initially and set up questions
   useEffect(() => {
     let stopped = false;
 
@@ -53,10 +51,6 @@ export default function MultiplayerBattlePage({
                 : roomData.questions
             );
           }
-          // If room status is "playing" and we're still waiting, start the game
-          if (roomData.status === "playing") {
-            setPhase((prev) => (prev === "waiting" ? "playing" : prev));
-          }
         }
       } catch (err) {
         console.error("Failed to fetch room:", err);
@@ -64,15 +58,56 @@ export default function MultiplayerBattlePage({
     };
 
     fetchRoom();
-    // Poll every 3 seconds only while waiting for opponent
-    const interval = setInterval(() => {
-      if (phase === "waiting") fetchRoom();
-    }, 3000);
-    return () => {
-      stopped = true;
-      clearInterval(interval);
+    return () => { stopped = true; };
+  }, [roomCode]);
+
+  // Poll for game state changes (opponent joining, game start, score updates)
+  useEffect(() => {
+    if (!user) return;
+
+    const pollState = async () => {
+      try {
+        const res = await fetch(`/api/rooms/events?code=${roomCode}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Detect game start
+        if (data.status === "playing" && phase === "waiting") {
+          setPhase("playing");
+        }
+
+        // Detect opponent joined
+        if (data.guest_id && room && !room.guest_id) {
+          setRoom((prev) =>
+            prev ? { ...prev, guest_id: data.guest_id, guest_name: data.guest_name } : prev
+          );
+        }
+
+        // Update opponent scores from DB
+        const remoteScores = data.player_scores || {};
+        setPlayers((prev) => {
+          if (prev.length === 0) return prev;
+          return prev.map((p) => {
+            const remote = remoteScores[p.userId];
+            if (remote && p.userId !== user.id) {
+              return {
+                ...p,
+                score: remote.score ?? p.score,
+                currentIndex: remote.currentIndex ?? p.currentIndex,
+                finished: remote.finished ?? p.finished,
+              };
+            }
+            return p;
+          });
+        });
+      } catch {
+        // silent
+      }
     };
-  }, [roomCode, phase]);
+
+    const interval = setInterval(pollState, 1500);
+    return () => clearInterval(interval);
+  }, [roomCode, phase, room, user]);
 
   // Initialize player scores — only once when room first loads with both players
   const playersInitialized = useRef(false);
@@ -103,93 +138,12 @@ export default function MultiplayerBattlePage({
     setPlayers(initialPlayers);
   }, [room, user]);
 
-  // Listen for realtime events — only after connected
-  useEffect(() => {
-    if (!ready) return;
-
-    const unsubJoin = on("player_joined", (payload) => {
-      const guestId = payload.guestId as string;
-      const guestName = payload.guestName as string;
-      setPlayers((prev) => {
-        if (prev.find((p) => p.userId === guestId)) return prev;
-        return [
-          ...prev,
-          {
-            userId: guestId,
-            userName: guestName,
-            score: 0,
-            currentIndex: 0,
-            finished: false,
-          },
-        ];
-      });
-      // Refresh room data
-      setRoom((prev) =>
-        prev ? { ...prev, guest_id: guestId, guest_name: guestName } : prev
-      );
-    });
-
-    const unsubStart = on("game_start", () => {
-      setPhase("playing");
-    });
-
-    const unsubScore = on("score_update", (payload) => {
-      const senderId = payload.userId as string;
-      setPlayers((prev) =>
-        prev.map((p) =>
-          p.userId === senderId
-            ? {
-                ...p,
-                score: payload.score as number,
-                currentIndex: payload.currentIndex as number,
-              }
-            : p
-        )
-      );
-    });
-
-    const unsubComplete = on("game_complete", (payload) => {
-      const senderId = payload.userId as string;
-      setPlayers((prev) =>
-        prev.map((p) =>
-          p.userId === senderId
-            ? {
-                ...p,
-                score: payload.finalScore as number,
-                finished: true,
-              }
-            : p
-        )
-      );
-    });
-
-    return () => {
-      unsubJoin();
-      unsubStart();
-      unsubScore();
-      unsubComplete();
-    };
-  }, [on, ready]);
-
-  // Publish player_joined when guest enters
-  useEffect(() => {
-    if (!user || !room || isHost || !ready) return;
-    if (room.guest_id === user.id) {
-      publish("player_joined", {
-        guestId: user.id,
-        guestName: user.name || user.email,
-      });
-    }
-  }, [user, room, isHost, ready, publish]);
-
   const handleStartGame = async () => {
-    // Update room status in DB so guest can detect via polling
     await fetch("/api/rooms", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ room_code: roomCode, status: "playing" }),
     });
-    await publish("game_start", {});
     setPhase("playing");
   };
 
@@ -201,13 +155,31 @@ export default function MultiplayerBattlePage({
       scoreRef.current = newScore;
       setScore(newScore);
 
-      publish("score_update", {
-        userId: user.id,
-        score: newScore,
-        currentIndex: currentIndex + 1,
+      // Update own score in players list
+      setPlayers((prev) =>
+        prev.map((p) =>
+          p.userId === user.id
+            ? { ...p, score: newScore, currentIndex: currentIndex + 1 }
+            : p
+        )
+      );
+
+      // Push score to DB for opponent to poll
+      fetch("/api/rooms/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          room_code: roomCode,
+          event: "score_update",
+          payload: {
+            userId: user.id,
+            score: newScore,
+            currentIndex: currentIndex + 1,
+          },
+        }),
       });
     },
-    [user, questions, currentIndex, publish]
+    [user, questions, currentIndex, roomCode]
   );
 
   const handleNext = useCallback(async () => {
@@ -217,13 +189,28 @@ export default function MultiplayerBattlePage({
       setMyFinished(true);
       setPhase("finished");
 
+      // Update own finished status in players list
       if (user) {
-        publish("game_complete", {
-          userId: user.id,
-          finalScore,
+        setPlayers((prev) =>
+          prev.map((p) =>
+            p.userId === user.id
+              ? { ...p, score: finalScore, finished: true }
+              : p
+          )
+        );
+
+        // Push completion to DB
+        fetch("/api/rooms/events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            room_code: roomCode,
+            event: "game_complete",
+            payload: { userId: user.id, finalScore },
+          }),
         });
 
-        // Save score via API
+        // Save score to leaderboard
         await fetch("/api/quiz/save-score", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -239,7 +226,7 @@ export default function MultiplayerBattlePage({
     } else {
       setCurrentIndex(nextIndex);
     }
-  }, [currentIndex, questions.length, user, room, publish]);
+  }, [currentIndex, questions.length, user, room, roomCode]);
 
   if (!room || !user) {
     return (
@@ -281,7 +268,7 @@ export default function MultiplayerBattlePage({
                 color="primary"
                 size="lg"
                 onPress={handleStartGame}
-                isDisabled={!questions.length || !ready}
+                isDisabled={!questions.length}
               >
                 Start Game
               </Button>
