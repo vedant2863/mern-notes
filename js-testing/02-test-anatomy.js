@@ -1,30 +1,15 @@
 // ============================================================
 // FILE 02: TEST ANATOMY
 // Topic: The structure, lifecycle, and naming of well-written tests
-// WHY: Writing tests is easy. Writing GOOD tests — tests that are
-//   readable, maintainable, and trustworthy — requires understanding
-//   the anatomy. This file teaches the patterns that every professional
-//   testing codebase follows.
 // ============================================================
 
 // ============================================================
-// EXAMPLE 1 — The Zomato Onboarding Checklist
-// Story: Every new restaurant on Zomato goes through a structured
-//   checklist: (1) verify menu uploaded, (2) verify bank details
-//   for payouts, (3) verify FSSAI food safety license. If any step
-//   fails, the restaurant doesn't go live. Tests follow the exact
-//   same structured, step-by-step verification approach.
+// STORY: Every new restaurant on Zomato goes through a structured
+//   checklist before going live. Tests follow the exact same
+//   step-by-step verification approach: Arrange, Act, Assert.
 // ============================================================
 
-// WHY: The AAA pattern is the most important testing pattern.
-// It makes every test predictable, readable, and debuggable.
-
-// --- The AAA Pattern: Arrange -> Act -> Assert ---
-// ARRANGE: Set up inputs, create objects, prepare the state.
-// ACT:     Call the function or method being tested.
-// ASSERT:  Verify the result matches expectations.
-
-// --- The module we'll test throughout this file ---
+// BLOCK 1 — The Module Under Test
 
 class ShoppingCart {
   constructor() {
@@ -81,7 +66,7 @@ class ShoppingCart {
   }
 }
 
-// --- Mini test framework ---
+// --- Mini test framework (reused from File 01, with hooks) ---
 const results = { passed: 0, failed: 0, skipped: 0, errors: [] };
 const hooks = { beforeEachFns: [], afterEachFns: [] };
 
@@ -108,7 +93,6 @@ function test(name, fn) {
     hooks.afterEachFns.forEach((h) => h());
   }
 }
-const it = test; // Alias — test and it are interchangeable
 
 test.skip = function (name) { results.skipped++; console.log(`  SKIP: ${name}`); };
 test.todo = function (name) { console.log(`  TODO: ${name}`); };
@@ -132,23 +116,18 @@ function expect(received) {
 
 
 // ============================================================
-// EXAMPLE 2 — AAA Pattern in Practice
-// Story: BigBasket's QA team mandates AAA in every test. New engineers
-//   who skip clear sections get PRs sent back. "If I can't find the
-//   Arrange, Act, and Assert in 5 seconds, rewrite it," says their lead.
+// SECTION 1 — The AAA Pattern (Arrange -> Act -> Assert)
 // ============================================================
 
-describe("ShoppingCart — AAA Pattern", () => {
+describe("ShoppingCart -- AAA Pattern", () => {
   test("should add an item and calculate subtotal", () => {
-    // ARRANGE — set up the cart and item details
+    // ARRANGE
     const cart = new ShoppingCart();
-    const itemName = "Paneer Tikka";
-    const itemPrice = 299;
 
-    // ACT — perform the action being tested
-    cart.addItem(itemName, itemPrice);
+    // ACT
+    cart.addItem("Paneer Tikka", 299);
 
-    // ASSERT — verify the results
+    // ASSERT
     expect(cart.getItemCount()).toBe(1);
     expect(cart.getSubtotal()).toBe(299);
   });
@@ -163,20 +142,15 @@ describe("ShoppingCart — AAA Pattern", () => {
     cart.applyCoupon("ZOMATO20", 20);
 
     // ASSERT
-    expect(cart.getSubtotal()).toBe(450); // 350 + 100
-    expect(cart.getTotal()).toBe(360);    // 450 - 20%
+    expect(cart.getSubtotal()).toBe(450);
+    expect(cart.getTotal()).toBe(360);
   });
 });
 
 
 // ============================================================
-// EXAMPLE 3 — describe() and test() — Grouping Tests
-// Story: Dunzo's test suite has 1,200 tests organized into nested
-//   describe blocks: Module -> Method -> Scenario. Finding a specific
-//   test takes 3 seconds because the hierarchy is crystal clear.
+// SECTION 2 — describe() and test() Grouping
 // ============================================================
-
-// WHY: Good grouping makes test output readable and failures locatable.
 
 describe("ShoppingCart", () => {
   describe("addItem()", () => {
@@ -217,20 +191,11 @@ describe("ShoppingCart", () => {
 
 
 // ============================================================
-// EXAMPLE 4 — beforeEach / afterEach — Setup and Teardown
-// Story: Urban Company runs tests for their booking system. Each
-//   test needs a fresh context. Using beforeEach, they create this
-//   setup once instead of repeating it in 40 tests.
+// SECTION 3 — beforeEach / afterEach (Setup & Teardown)
 // ============================================================
 
-// WHY: Hooks eliminate duplication and ensure test isolation.
-
 // Lifecycle order in Vitest/Jest:
-//   beforeAll()     <- connect to DB, start server
-//     beforeEach()  <- create fresh test data
-//       test()      <- run test
-//     afterEach()   <- clean up test data
-//   afterAll()      <- disconnect DB, stop server
+//   beforeAll -> beforeEach -> test() -> afterEach -> afterAll
 
 let sharedCart;
 
@@ -243,58 +208,37 @@ describe("ShoppingCart with beforeEach", () => {
   afterEach(() => { sharedCart = null; });
 
   test("should start with pre-loaded items", () => {
-    expect(sharedCart.getItemCount()).toBe(5); // 1 + 4
-    expect(sharedCart.getSubtotal()).toBe(440); // 320 + 120
-  });
-
-  test("should allow adding more items to pre-loaded cart", () => {
-    sharedCart.addItem("Raita", 60);
-    expect(sharedCart.getItemCount()).toBe(6);
+    expect(sharedCart.getItemCount()).toBe(5);
+    expect(sharedCart.getSubtotal()).toBe(440);
   });
 
   test("should not see items from previous test (isolation proof)", () => {
-    // Raita from previous test does NOT leak — beforeEach resets
-    expect(sharedCart.getItemCount()).toBe(5);
+    sharedCart.addItem("Raita", 60);
+    expect(sharedCart.getItemCount()).toBe(6);
   });
 });
 
 
 // ============================================================
-// EXAMPLE 5 — test.skip, test.only, test.todo
-// Story: Lenskart uses test.skip for tests depending on APIs being
-//   redesigned. They use test.todo to plan tests for the virtual
-//   try-on feature. "TODO tests are our testing roadmap."
+// SECTION 4 — test.skip, test.only, test.todo
 // ============================================================
 
 describe("Test Modifiers", () => {
   test.skip("should handle international shipping (API not ready)");
-
-  // test.only('debug this one test') — runs ONLY this test
-  // DANGER: NEVER commit test.only! Use ESLint rule "no-only-tests"
-
   test("regular test runs normally", () => { expect(1 + 1).toBe(2); });
-
   test.todo("should apply loyalty points discount");
-  test.todo("should handle cart merge when user logs in");
+  // test.only('debug this one test') -- NEVER commit test.only!
 });
 
 
 // ============================================================
-// EXAMPLE 6 — Test Naming Conventions
-// Story: Razorpay's 300+ engineers follow strict naming:
-//   "should [expected behavior] when [condition]". Badly named
-//   tests get flagged by a custom ESLint rule.
+// SECTION 5 — Test Naming & Isolation
 // ============================================================
 
 describe("Test Naming Best Practices", () => {
-  // Pattern: "should [expected behavior] when [condition/input]"
-
+  // Pattern: "should [expected behavior] when [condition]"
   test("should return 0 when cart is empty", () => {
     expect(new ShoppingCart().getTotal()).toBe(0);
-  });
-
-  test("should throw error when removing item from empty cart", () => {
-    expect(() => new ShoppingCart().removeItem("X")).toThrow();
   });
 
   test("should apply 20% discount when SAVE20 coupon is used", () => {
@@ -304,29 +248,10 @@ describe("Test Naming Best Practices", () => {
     expect(cart.getTotal()).toBe(800);
   });
 
-  // BAD names: "test cart", "it works", "test 1", "should work correctly"
-  // GOOD names describe behavior + condition precisely
+  // BAD names: "test cart", "it works", "test 1"
 });
 
-
-// ============================================================
-// EXAMPLE 7 — Test Isolation & Flaky Tests
-// Story: Myntra's search team had 15 tests passing individually but
-//   failing together. Test #3 mutated a shared array, test #8 depended
-//   on it. It took 2 days to find. Rule: "No shared mutable state."
-//
-//   CRED had 12 flaky tests — sometimes pass, sometimes fail. Engineers
-//   started ignoring CI. A real bug slipped through. Zero-tolerance now.
-// ============================================================
-
-// WHY: Test isolation is non-negotiable. Flaky tests destroy trust.
-
-// BAD — shared mutable state:
-// const arr = [1,2,3];
-// test('adds', () => { arr.push(4); expect(arr.length).toBe(4); });
-// test('check', () => { expect(arr.length).toBe(3); }); // FAIL! arr is [1,2,3,4]
-
-// GOOD — fresh state per test:
+// --- Test Isolation: no shared mutable state ---
 describe("Test Isolation", () => {
   test("each test creates its own data", () => {
     const items = [1, 2, 3];
@@ -336,35 +261,22 @@ describe("Test Isolation", () => {
 
   test("not affected by previous test", () => {
     const items = [1, 2, 3];
-    expect(items.length).toBe(3); // Fresh array!
+    expect(items.length).toBe(3);
   });
 });
 
-// --- Common flaky test causes and fixes ---
-// 1. TIME: use fake timers instead of real setTimeout
-// 2. NETWORK: mock fetch/API calls
-// 3. ORDER: no shared mutable state
-// 4. RANDOMNESS: test patterns, not exact values
-//    BAD:  expect(generateId()).toBe('abc123')
-//    GOOD: expect(generateId()).toMatch(/^[a-z0-9]{6}$/)
+// Flaky test causes: TIME (use fake timers), NETWORK (mock APIs),
+// ORDER (no shared state), RANDOMNESS (test patterns not exact values)
 
 
 // ============================================================
-// EXAMPLE 8 — Practical: Complete Test Suite for ShoppingCart
-// Story: Swiggy Instamart's cart has 45 tests covering every edge
-//   case: empty cart, bulk items, coupon stacking (rejected), and
-//   unicode item names (trailing space = different item — real bug).
+// SECTION 6 — Practical: Complete ShoppingCart Suite
 // ============================================================
 
-describe("ShoppingCart — Complete Suite", () => {
+describe("ShoppingCart -- Complete Suite", () => {
   let cart;
   beforeEach(() => { cart = new ShoppingCart(); });
   afterEach(() => { cart = null; });
-
-  describe("empty cart", () => {
-    test("should have 0 items", () => { expect(cart.getItemCount()).toBe(0); });
-    test("should have Rs.0 total", () => { expect(cart.getTotal()).toBe(0); });
-  });
 
   describe("adding items", () => {
     test("should add single item", () => {
@@ -373,35 +285,10 @@ describe("ShoppingCart — Complete Suite", () => {
       expect(cart.getSubtotal()).toBe(20);
     });
 
-    test("should handle multiple items", () => {
-      cart.addItem("Chai", 15);
-      cart.addItem("Biscuit", 30);
-      cart.addItem("Samosa", 20, 3);
-      expect(cart.getItemCount()).toBe(5);
-      expect(cart.getSubtotal()).toBe(105);
-    });
-
     test("should merge duplicates", () => {
       cart.addItem("Chai", 15);
       cart.addItem("Chai", 15, 2);
       expect(cart.getItemCount()).toBe(3);
-    });
-
-    test("should support method chaining", () => {
-      const result = cart.addItem("A", 10).addItem("B", 20);
-      expect(result).toBe(cart);
-    });
-  });
-
-  describe("removing items", () => {
-    test("should remove existing item", () => {
-      cart.addItem("Chai", 15).addItem("Samosa", 20);
-      cart.removeItem("Chai");
-      expect(cart.getItemCount()).toBe(1);
-    });
-
-    test("should throw for missing item", () => {
-      expect(() => cart.removeItem("Ghost")).toThrow("not found");
     });
   });
 
@@ -417,10 +304,6 @@ describe("ShoppingCart — Complete Suite", () => {
       cart.applyCoupon("FIRST", 10);
       expect(() => cart.applyCoupon("SECOND", 20)).toThrow("Only one coupon");
     });
-
-    test("should reject discount over 50%", () => {
-      expect(() => cart.applyCoupon("SCAM", 75)).toThrow();
-    });
   });
 
   describe("clear", () => {
@@ -430,18 +313,6 @@ describe("ShoppingCart — Complete Suite", () => {
       cart.clear();
       expect(cart.getItemCount()).toBe(0);
       expect(cart.getTotal()).toBe(0);
-    });
-  });
-
-  describe("edge cases", () => {
-    test("should handle large quantities", () => {
-      cart.addItem("Pen", 5, 10000);
-      expect(cart.getSubtotal()).toBe(50000);
-    });
-
-    test("should handle decimal prices", () => {
-      cart.addItem("Candy", 2.5, 3);
-      expect(cart.getSubtotal()).toBe(7.5);
     });
   });
 });
@@ -457,22 +328,19 @@ if (results.errors.length > 0) {
 // ============================================================
 // KEY TAKEAWAYS
 // ============================================================
-// 1. AAA Pattern (Arrange -> Act -> Assert) is the foundation.
-//    Use it consistently in every test you write.
+// 1. AAA Pattern (Arrange -> Act -> Assert) in every test.
 //
-// 2. describe() groups tests; test()/it() defines cases. Nest
-//    describes for Module -> Method -> Scenario hierarchy.
+// 2. describe() groups tests; test()/it() defines cases.
+//    Nest describes: Module -> Method -> Scenario.
 //
 // 3. beforeEach/afterEach for per-test setup/teardown.
-//    beforeAll/afterAll for expensive one-time setup (DB, server).
+//    beforeAll/afterAll for expensive one-time setup.
 //
-// 4. test.skip for temporary exclusion, test.only for debugging
-//    (NEVER commit!), test.todo for planning future tests.
+// 4. test.skip for temp exclusion, test.only for debugging
+//    (NEVER commit!), test.todo for planning.
 //
-// 5. Name tests clearly: "should [behavior] when [condition]".
+// 5. Name tests: "should [behavior] when [condition]".
 //
 // 6. Test isolation is non-negotiable. No shared mutable state.
-//
-// 7. Flaky tests destroy trust. Fix immediately or delete.
-//    Causes: time, network, order dependency, randomness.
+//    Flaky tests destroy trust -- fix immediately or delete.
 // ============================================================

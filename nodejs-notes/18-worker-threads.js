@@ -2,30 +2,22 @@
  FILE 18: Worker Threads — True Parallelism in Node.js
  ============================================================
  Topic: The 'worker_threads' module — multi-threaded execution
- WHY THIS MATTERS:
-   Node.js is single-threaded. Worker threads let you run
-   CPU-intensive JavaScript in parallel WITHOUT spawning a
-   new process. They share memory via SharedArrayBuffer and
-   communicate via message passing — lighter than fork().
+ WHY: Worker threads run CPU-intensive JS in parallel WITHOUT
+   spawning a new process. They share memory via
+   SharedArrayBuffer and communicate via messages.
  ============================================================ */
 
 const {
-  isMainThread,
-  Worker,
-  parentPort,
-  workerData,
-  MessageChannel
+  isMainThread, Worker, parentPort, workerData, MessageChannel
 } = require('worker_threads');
 const { performance } = require('perf_hooks');
 
 // ============================================================
 // STORY: ISRO Parallel Computing Lab
-// Mission Director Sivan oversees the Parallel Computing Lab
-// at ISRO. He's the main thread — assigning orbit calculations
-// to computation nodes (Worker threads) running independently.
-// Each node processes trajectory data in parallel. They share
-// telemetry data (SharedArrayBuffer) and communicate via
-// inter-node messaging (message passing).
+// Mission Director Sivan assigns orbit calculations to
+// computation nodes (Worker threads). Each node processes
+// trajectory data in parallel, sharing telemetry via
+// SharedArrayBuffer and communicating via messages.
 // ============================================================
 
 // ── Worker thread code path ─────────────────────────────────
@@ -33,15 +25,10 @@ if (!isMainThread) {
   const task = workerData;
 
   if (task.type === 'basic') {
-    // Block 1: Basic computation node — receive data, compute, send back
-    const result = task.num * task.num;
     parentPort.postMessage({
-      node: `ComputeNode-${task.id}`,
-      input: task.num,
-      squared: result
+      node: `ComputeNode-${task.id}`, input: task.num, squared: task.num * task.num
     });
   } else if (task.type === 'primes') {
-    // Block 2: CPU-intensive — count primes up to N (orbit factor computation)
     function countPrimes(max) {
       let count = 0;
       for (let i = 2; i <= max; i++) {
@@ -55,17 +42,12 @@ if (!isMainThread) {
     }
     const start = performance.now();
     const count = countPrimes(task.max);
-    const elapsed = performance.now() - start;
-    parentPort.postMessage({ count, elapsed });
+    parentPort.postMessage({ count, elapsed: performance.now() - start });
   } else if (task.type === 'shared') {
-    // Block 3: SharedArrayBuffer — increment shared telemetry counter
     const sharedArray = new Int32Array(task.sharedBuffer);
-    for (let i = 0; i < task.iterations; i++) {
-      Atomics.add(sharedArray, 0, 1);
-    }
+    for (let i = 0; i < task.iterations; i++) Atomics.add(sharedArray, 0, 1);
     parentPort.postMessage({ done: true, threadId: task.id });
   } else if (task.type === 'channel') {
-    // Block 3: MessageChannel — communicate via port
     parentPort.once('message', (msg) => {
       if (msg.port) {
         msg.port.postMessage({ from: `ComputeNode-${task.id}`, message: 'Telemetry channel established!' });
@@ -74,16 +56,14 @@ if (!isMainThread) {
       }
     });
   }
-
-  // Exit worker code path
   return;
 }
 
-// ── Main thread (Mission Director Sivan) ────────────────────
+// ── Main thread (Mission Director) ──────────────────────────
 
 async function main() {
   // ============================================================
-  // EXAMPLE BLOCK 1 — Worker Basics
+  // BLOCK 1 — Worker Basics
   // ============================================================
 
   console.log('='.repeat(60));
@@ -91,51 +71,34 @@ async function main() {
   console.log('='.repeat(60));
 
   console.log(`\n  Main thread? : ${isMainThread}`);
-  // Output: Main thread? : true
 
-  // WHY: Inline worker pattern — use __filename so the worker
-  // runs THIS file, then the !isMainThread branch handles it.
+  // WHY: Inline worker pattern — __filename runs this file,
+  // the !isMainThread branch handles the task.
 
-  console.log('\n--- Dispatching computation nodes with workerData ---');
+  console.log('\n--- Dispatching workers with workerData ---');
 
-  const computeNodes = [10, 20, 30].map((num, i) => {
+  const results = await Promise.all([10, 20, 30].map((num, i) => {
     return new Promise((resolve, reject) => {
-      const worker = new Worker(__filename, {
-        workerData: { type: 'basic', id: i + 1, num }
-      });
-
-      worker.on('message', (msg) => {
-        console.log(`  ${msg.node}: ${msg.input}^2 = ${msg.squared}`);
-        resolve(msg);
-      });
-
-      worker.on('error', reject);
-      worker.on('exit', (code) => {
-        if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
-      });
+      const w = new Worker(__filename, { workerData: { type: 'basic', id: i + 1, num } });
+      w.on('message', (msg) => { console.log(`  ${msg.node}: ${msg.input}^2 = ${msg.squared}`); resolve(msg); });
+      w.on('error', reject);
     });
-  });
-
-  await Promise.all(computeNodes);
-  // Output: ComputeNode-1: 10^2 = 100
-  // Output: ComputeNode-2: 20^2 = 400
-  // Output: ComputeNode-3: 30^2 = 900
+  }));
+  // Output: ComputeNode-1: 10^2 = 100, etc.
 
   // ============================================================
-  // EXAMPLE BLOCK 2 — CPU-Intensive Work: Main vs Worker
+  // BLOCK 2 — CPU-Intensive Work: Main vs Worker
   // ============================================================
 
   console.log('\n' + '='.repeat(60));
-  console.log('  BLOCK 2: CPU-Intensive — Mission Control vs Compute Node');
+  console.log('  BLOCK 2: CPU-Intensive — Main Thread vs Worker');
   console.log('='.repeat(60));
 
   const PRIME_MAX = 100000;
 
-  // WHY: Counting primes is CPU-heavy (like orbit calculations).
-  // Doing it on the main thread blocks everything.
-  // Doing it in a compute node keeps mission control responsive.
+  // WHY: CPU-heavy work on main thread blocks everything.
+  // In a worker, main thread stays responsive.
 
-  // ── Count primes on main thread ───────────────────────────
   function countPrimesMain(max) {
     let count = 0;
     for (let i = 2; i <= max; i++) {
@@ -148,121 +111,70 @@ async function main() {
     return count;
   }
 
-  console.log(`\n--- Orbit factor computation up to ${PRIME_MAX.toLocaleString()} ---`);
+  console.log(`\n--- Counting primes up to ${PRIME_MAX.toLocaleString()} ---`);
 
   const mainStart = performance.now();
   const mainCount = countPrimesMain(PRIME_MAX);
-  const mainTime = (performance.now() - mainStart).toFixed(2);
+  console.log(`  Main thread : ${mainCount} primes in ${(performance.now() - mainStart).toFixed(2)}ms`);
 
-  console.log(`  Mission Control : ${mainCount} primes in ${mainTime}ms`);
-  // Output: Mission Control : 9592 primes in 45.23ms (varies by system)
-
-  // ── Count primes in a compute node ────────────────────────
   const nodeResult = await new Promise((resolve, reject) => {
-    const w = new Worker(__filename, {
-      workerData: { type: 'primes', max: PRIME_MAX }
-    });
+    const w = new Worker(__filename, { workerData: { type: 'primes', max: PRIME_MAX } });
     w.on('message', resolve);
     w.on('error', reject);
   });
 
-  console.log(`  Compute Node   : ${nodeResult.count} primes in ${nodeResult.elapsed.toFixed(2)}ms`);
-  // Output: Compute Node   : 9592 primes in 42.17ms (varies by system)
-  console.log(`  Same result    : ${mainCount === nodeResult.count}`);
-  // Output: Same result    : true
-
-  // WHY: For a single computation the times are similar. The real
-  // benefit is that the compute node does NOT block mission control,
-  // so the system can keep handling telemetry.
-  console.log('  Note: Compute node advantage is non-blocking, not raw speed');
+  console.log(`  Worker      : ${nodeResult.count} primes in ${nodeResult.elapsed.toFixed(2)}ms`);
+  console.log('  Key benefit: worker does NOT block the main thread');
 
   // ============================================================
-  // EXAMPLE BLOCK 3 — SharedArrayBuffer, Atomics & MessageChannel
+  // BLOCK 3 — SharedArrayBuffer, Atomics & MessageChannel
   // ============================================================
 
   console.log('\n' + '='.repeat(60));
-  console.log('  BLOCK 3: Shared Telemetry Buffer, Atomics & MessageChannel');
+  console.log('  BLOCK 3: SharedArrayBuffer, Atomics & MessageChannel');
   console.log('='.repeat(60));
 
-  // ── SharedArrayBuffer with Atomics ────────────────────────
-  // WHY: SharedArrayBuffer lets threads access the SAME memory.
-  // Atomics ensure thread-safe reads/writes (no race conditions).
-  // Like shared telemetry data across ISRO computation nodes.
+  // ── SharedArrayBuffer + Atomics ────────────────────────────
+  // WHY: Threads access SAME memory. Atomics ensure thread-safety.
 
-  console.log('\n--- SharedArrayBuffer + Atomics (Shared Telemetry) ---');
+  console.log('\n--- SharedArrayBuffer + Atomics ---');
 
   const ITERATIONS = 10000;
   const NODE_COUNT = 3;
-
-  // Create shared memory — 4 bytes for one Int32
   const sharedBuffer = new SharedArrayBuffer(4);
-  const mainView = new Int32Array(sharedBuffer);
-  mainView[0] = 0; // Initialize telemetry counter to 0
+  new Int32Array(sharedBuffer)[0] = 0;
 
-  const sharedNodes = [];
-  for (let i = 0; i < NODE_COUNT; i++) {
-    sharedNodes.push(
-      new Promise((resolve, reject) => {
-        const w = new Worker(__filename, {
-          workerData: {
-            type: 'shared',
-            id: i + 1,
-            sharedBuffer,
-            iterations: ITERATIONS
-          }
-        });
-        w.on('message', (msg) => {
-          console.log(`  ComputeNode-${msg.threadId} finished telemetry update`);
-          resolve();
-        });
-        w.on('error', reject);
-      })
-    );
-  }
+  await Promise.all(Array.from({ length: NODE_COUNT }, (_, i) =>
+    new Promise((resolve, reject) => {
+      const w = new Worker(__filename, {
+        workerData: { type: 'shared', id: i + 1, sharedBuffer, iterations: ITERATIONS }
+      });
+      w.on('message', () => resolve());
+      w.on('error', reject);
+    })
+  ));
 
-  await Promise.all(sharedNodes);
-
-  const finalCount = mainView[0];
+  const finalCount = new Int32Array(sharedBuffer)[0];
   const expected = NODE_COUNT * ITERATIONS;
-  console.log(`  Final counter : ${finalCount}`);
-  console.log(`  Expected      : ${expected}`);
-  console.log(`  Atomic safe?  : ${finalCount === expected}`);
-  // Output: Final counter : 30000
-  // Output: Expected      : 30000
-  // Output: Atomic safe?  : true
+  console.log(`  Final: ${finalCount}, Expected: ${expected}, Safe: ${finalCount === expected}`);
 
   // ── MessageChannel — direct port communication ────────────
-  // WHY: MessageChannel creates a pair of connected ports.
-  // Transfer a port to a compute node for direct communication
-  // (like a dedicated telemetry channel between ISRO nodes).
+  // WHY: Creates a port pair for direct thread-to-thread messaging.
 
-  console.log('\n--- MessageChannel (Dedicated Telemetry Channel) ---');
+  console.log('\n--- MessageChannel ---');
 
   const { port1, port2 } = new MessageChannel();
-
-  const channelResult = await new Promise((resolve, reject) => {
-    const w = new Worker(__filename, {
-      workerData: { type: 'channel', id: 1 }
-    });
-
-    // Listen on our end of the channel
+  await new Promise((resolve, reject) => {
+    const w = new Worker(__filename, { workerData: { type: 'channel', id: 1 } });
     port1.on('message', (msg) => {
-      console.log(`  Channel msg  : from=${msg.from}, "${msg.message}"`);
-      // Output: Channel msg  : from=ComputeNode-1, "Telemetry channel established!"
+      console.log(`  Channel: from=${msg.from}, "${msg.message}"`);
       port1.close();
     });
-
-    w.on('message', (msg) => {
-      if (msg.done) resolve(msg);
-    });
+    w.on('message', (msg) => { if (msg.done) resolve(); });
     w.on('error', reject);
-
-    // Transfer port2 to the compute node
-    // WHY: transferList moves ownership — mission control can no longer use port2
+    // WHY: transferList moves ownership — main can no longer use port2
     w.postMessage({ port: port2 }, [port2]);
   });
-
-  console.log('  Telemetry channel communication complete');
 
   console.log('\n' + '='.repeat(60));
 }
@@ -272,15 +184,12 @@ main().catch(console.error);
 // ============================================================
 // KEY TAKEAWAYS
 // ============================================================
-// 1. isMainThread — detect if running in main or worker
+// 1. isMainThread — detect main vs worker context
 // 2. new Worker(__filename, { workerData }) — inline pattern
 // 3. parentPort.postMessage/on('message') — worker comms
 // 4. Workers don't block the main thread — key advantage
-// 5. Same-file pattern: if (!isMainThread) { ... } else { ... }
-// 6. SharedArrayBuffer — zero-copy shared memory between threads
-// 7. Atomics.add/load/store — thread-safe shared memory ops
-// 8. MessageChannel — create port pairs for direct communication
-// 9. transferList in postMessage moves ownership of ports/buffers
-// 10. Workers are lighter than child processes but heavier than
-//     promises — use for CPU-bound work, not I/O
+// 5. SharedArrayBuffer — zero-copy shared memory between threads
+// 6. Atomics.add/load/store — thread-safe shared memory ops
+// 7. MessageChannel — port pairs for direct communication
+// 8. transferList in postMessage moves ownership of ports/buffers
 // ============================================================

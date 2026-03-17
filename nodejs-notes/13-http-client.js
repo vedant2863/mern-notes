@@ -1,30 +1,23 @@
 /** ============================================================
  FILE 13: HTTP Client — Making Requests
  ============================================================
- Topic: http.get, http.request, global fetch (Node 18+),
-        GET and POST requests, response handling
- WHY THIS MATTERS:
-   Node.js is not just a server — it is also a powerful HTTP
-   client. From calling APIs to microservice communication,
-   knowing how to make requests is essential. And with
-   global fetch(), the ergonomics just got much better.
+ Topic: http.get, http.request, global fetch (Node 18+)
+ WHY: Node is also a powerful HTTP client. From calling APIs
+   to microservice communication, knowing these methods is
+   essential. fetch() makes it much simpler.
  ============================================================ */
 
 // ============================================================
-// STORY: HIGHWAY DHABA CLIENT (continued)
+// STORY: HIGHWAY DHABA CLIENT
 //   Now we are on the other side of the window — the customer.
-//   We place orders (requests), wait for food (responses),
-//   and discover that some ordering methods are much easier
-//   than others.
+//   We place orders (requests) and wait for food (responses).
 // ============================================================
 
 const http = require("http");
 
-const PORT = 0; // OS picks an available port
+const PORT = 0;
 
-// ──────────────────────────────────────────────────────────────
-// Temp Server — a simple API to make requests against
-// ──────────────────────────────────────────────────────────────
+// ── Test Server — a simple API to request against ───────────
 
 function createTestServer() {
   return http.createServer((req, res) => {
@@ -32,21 +25,7 @@ function createTestServer() {
 
     if (method === "GET" && url === "/api/greeting") {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ message: "Namaste from the dhaba!", time: new Date().toISOString() }));
-      return;
-    }
-
-    if (method === "GET" && url === "/api/specials") {
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "X-Daily-Special": "Paneer Tikka",
-      });
-      res.end(JSON.stringify({
-        specials: [
-          { name: "Paneer Tikka", price: 220 },
-          { name: "Aloo Paratha", price: 90 },
-        ],
-      }));
+      res.end(JSON.stringify({ message: "Namaste from the dhaba!" }));
       return;
     }
 
@@ -56,11 +35,7 @@ function createTestServer() {
       req.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString());
         res.writeHead(201, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({
-          confirmed: true,
-          order: body,
-          estimatedMinutes: 15,
-        }));
+        res.end(JSON.stringify({ confirmed: true, order: body, estimatedMinutes: 15 }));
       });
       return;
     }
@@ -70,9 +45,7 @@ function createTestServer() {
   });
 }
 
-// ──────────────────────────────────────────────────────────────
-// Helper: collect response body from an http response
-// ──────────────────────────────────────────────────────────────
+// ── Helper: collect response body ───────────────────────────
 
 function collectBody(res) {
   return new Promise((resolve) => {
@@ -83,82 +56,52 @@ function collectBody(res) {
 }
 
 // ============================================================
-// EXAMPLE BLOCK 1 — http.get() and http.request() for GET
+// BLOCK 1 — http.get() and http.request()
 // ============================================================
 
 async function block1_httpGetAndRequest(port) {
   console.log("=== BLOCK 1: http.get() and http.request() ===\n");
 
-  // ──────────────────────────────────────────────────────────
-  // 1a — http.get() — shorthand for GET requests
-  // ──────────────────────────────────────────────────────────
+  // ── http.get() — shorthand for GET requests ────────────────
+  // WHY: Auto-sets method to GET and calls req.end() for you.
 
   console.log("  --- http.get() ---\n");
-
-  // WHY: http.get() is a convenience method that automatically
-  //   sets method to GET and calls req.end(). For GET requests
-  //   it saves a couple lines of boilerplate.
 
   const getResult = await new Promise((resolve, reject) => {
     http.get(`http://localhost:${port}/api/greeting`, async (res) => {
       const body = await collectBody(res);
-      resolve({ statusCode: res.statusCode, headers: res.headers, body });
+      resolve({ statusCode: res.statusCode, body });
     }).on("error", reject);
   });
 
   console.log(`  Status: ${getResult.statusCode}`);
-  // Output: Status: 200
-  console.log(`  Content-Type: ${getResult.headers["content-type"]}`);
-  // Output: Content-Type: application/json
   const greeting = JSON.parse(getResult.body);
   console.log(`  Message: ${greeting.message}`);
+  // Output: Status: 200
   // Output: Message: Namaste from the dhaba!
 
-  // ──────────────────────────────────────────────────────────
-  // 1b — http.request() for GET — more control
-  // ──────────────────────────────────────────────────────────
+  // ── http.request() — full control ─────────────────────────
+  // WHY: Lets you set method, headers, timeout. Must call req.end() yourself.
 
   console.log("\n  --- http.request() for GET ---\n");
 
-  // WHY: http.request() gives you full control over method,
-  //   headers, timeout, etc. You must call req.end() yourself.
-
   const reqResult = await new Promise((resolve, reject) => {
-    const options = {
-      hostname: "localhost",
-      port: port,
-      path: "/api/specials",
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "X-Customer-Id": "cust-42",
-      },
-    };
-
-    const req = http.request(options, async (res) => {
+    const req = http.request({
+      hostname: "localhost", port, path: "/api/greeting", method: "GET",
+      headers: { Accept: "application/json" },
+    }, async (res) => {
       const body = await collectBody(res);
-      resolve({
-        statusCode: res.statusCode,
-        headers: res.headers,
-        body,
-      });
+      resolve({ statusCode: res.statusCode, body });
     });
-
     req.on("error", reject);
-    req.end(); // WHY: Must call end() — http.request does NOT auto-call it.
+    req.end(); // WHY: Must call end() — http.request does NOT auto-call it
   });
 
   console.log(`  Status: ${reqResult.statusCode}`);
   // Output: Status: 200
-  console.log(`  X-Daily-Special header: ${reqResult.headers["x-daily-special"]}`);
-  // Output: X-Daily-Special header: Paneer Tikka
-  const specials = JSON.parse(reqResult.body);
-  console.log(`  Specials: ${specials.specials.map((s) => s.name).join(", ")}`);
-  // Output: Specials: Paneer Tikka, Aloo Paratha
 
-  // ──────────────────────────────────────────────────────────
-  // 1c — Handling a 404
-  // ──────────────────────────────────────────────────────────
+  // ── Handling a 404 ─────────────────────────────────────────
+  // WHY: http.get/request do NOT throw on 4xx/5xx — check statusCode yourself.
 
   console.log("\n  --- Handling 404 ---\n");
 
@@ -171,141 +114,80 @@ async function block1_httpGetAndRequest(port) {
 
   console.log(`  Status: ${notFound.statusCode}`);
   // Output: Status: 404
-  console.log(`  Body: ${notFound.body}`);
-  // Output: Body: {"error":"Not found"}
-
-  // WHY: http.get/request do NOT throw on 4xx/5xx — they just
-  //   set the status code. You must check it yourself. This is
-  //   unlike fetch() which also doesn't throw but has res.ok.
-
   console.log("");
 }
 
 // ============================================================
-// EXAMPLE BLOCK 2 — POST Requests and Global fetch()
+// BLOCK 2 — POST Requests & Global fetch()
 // ============================================================
 
 async function block2_postAndFetch(port) {
   console.log("=== BLOCK 2: POST Requests & Global fetch() ===\n");
 
-  // ──────────────────────────────────────────────────────────
-  // 2a — POST with http.request()
-  // ──────────────────────────────────────────────────────────
+  // ── POST with http.request() ──────────────────────────────
 
   console.log("  --- POST with http.request() ---\n");
 
-  const postBody = JSON.stringify({
-    item: "Tandoori Chicken",
-    quantity: 3,
-    notes: "Extra green chutney please",
-  });
+  const postBody = JSON.stringify({ item: "Tandoori Chicken", quantity: 3 });
 
   const postResult = await new Promise((resolve, reject) => {
-    const options = {
-      hostname: "localhost",
-      port: port,
-      path: "/api/order",
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(postBody),
-      },
-    };
-
-    const req = http.request(options, async (res) => {
+    const req = http.request({
+      hostname: "localhost", port, path: "/api/order", method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(postBody) },
+    }, async (res) => {
       const body = await collectBody(res);
       resolve({ statusCode: res.statusCode, body });
     });
-
     req.on("error", reject);
-    // WHY: For POST, you write the body to the request stream
-    //   before calling end(). The request IS a writable stream.
+    // WHY: For POST, write the body before calling end()
     req.write(postBody);
     req.end();
   });
 
   console.log(`  Status: ${postResult.statusCode}`);
-  // Output: Status: 201
   const orderConfirm = JSON.parse(postResult.body);
   console.log(`  Confirmed: ${orderConfirm.confirmed}`);
-  console.log(`  Item: ${orderConfirm.order.item}`);
-  console.log(`  ETA: ${orderConfirm.estimatedMinutes} minutes`);
-  // Output: Confirmed: true
+  // Output: Status: 201
 
-  // ──────────────────────────────────────────────────────────
-  // 2b — Global fetch() for GET (Node 18+)
-  // ──────────────────────────────────────────────────────────
+  // ── Global fetch() — GET (Node 18+) ───────────────────────
+  // WHY: Built into Node 18+. Promise-based, no chunk wrangling,
+  // same API browsers use.
 
   console.log("\n  --- Global fetch() — GET ---\n");
 
-  // WHY: fetch() is built into Node 18+ (no node-fetch needed).
-  //   It is MUCH simpler than http.request — no manual chunk
-  //   collection, no req.end(), no callback nesting. This is
-  //   the same API browsers have used for years.
-
   const fetchGetRes = await fetch(`http://localhost:${port}/api/greeting`);
   const fetchGetData = await fetchGetRes.json();
-
-  console.log(`  Status: ${fetchGetRes.status}`);
-  // Output: Status: 200
-  console.log(`  ok: ${fetchGetRes.ok}`);
-  // Output: ok: true
+  console.log(`  Status: ${fetchGetRes.status}, ok: ${fetchGetRes.ok}`);
   console.log(`  Message: ${fetchGetData.message}`);
-  // Output: Message: Namaste from the dhaba!
+  // Output: Status: 200, ok: true
 
-  // ──────────────────────────────────────────────────────────
-  // 2c — Global fetch() for POST
-  // ──────────────────────────────────────────────────────────
+  // ── Global fetch() — POST ─────────────────────────────────
 
   console.log("\n  --- Global fetch() — POST ---\n");
 
   const fetchPostRes = await fetch(`http://localhost:${port}/api/order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      item: "Butter Naan",
-      quantity: 4,
-      notes: "Extra butter on the naan",
-    }),
+    body: JSON.stringify({ item: "Butter Naan", quantity: 4 }),
   });
   const fetchPostData = await fetchPostRes.json();
-
   console.log(`  Status: ${fetchPostRes.status}`);
-  // Output: Status: 201
-  console.log(`  Confirmed: ${fetchPostData.confirmed}`);
   console.log(`  Item: ${fetchPostData.order.item}`);
+  // Output: Status: 201
   // Output: Item: Butter Naan
 
-  // ──────────────────────────────────────────────────────────
-  // 2d — Ergonomics comparison
-  // ──────────────────────────────────────────────────────────
-
-  console.log("\n  --- Ergonomics Comparison ---\n");
-  console.log("  http.request():                     fetch():");
-  console.log("  ─────────────────────────────────    ─────────────────────────────");
-  console.log("  • Callback-based                    • Promise-based (async/await)");
-  console.log("  • Manual chunk collection            • res.json() / res.text()");
-  console.log("  • Must call req.end()                • Automatic");
-  console.log("  • Must set Content-Length             • Automatic");
-  console.log("  • No res.ok / res.status sugar        • res.ok, res.status built in");
-  console.log("  • Available since Node 0.x            • Available since Node 18");
-  console.log("  • Full stream-level control           • Higher-level abstraction");
-
-  // WHY: Use fetch() for most HTTP client needs. Fall back to
-  //   http.request() when you need stream-level control, custom
-  //   agents, or compatibility with older Node versions.
-
-  console.log("");
+  // ── Ergonomics comparison ─────────────────────────────────
+  console.log("\n  --- Ergonomics Comparison ---");
+  console.log("  http.request(): callback-based, manual chunks, must call end()");
+  console.log("  fetch():        promise-based, res.json()/text(), automatic");
+  console.log("  Use fetch() for most needs. Fall back to http.request() for stream control.\n");
 }
 
-// ──────────────────────────────────────────────────────────────
-// Main — start server, run blocks, close server
-// ──────────────────────────────────────────────────────────────
+// ── Main ────────────────────────────────────────────────────
 
 async function main() {
   const server = createTestServer();
 
-  // Start server
   const port = await new Promise((resolve) => {
     server.listen(PORT, "localhost", () => {
       const addr = server.address();
@@ -314,16 +196,11 @@ async function main() {
     });
   });
 
-  // Run test blocks
   await block1_httpGetAndRequest(port);
   await block2_postAndFetch(port);
 
-  // Close server
   await new Promise((resolve) => {
-    server.close(() => {
-      console.log("  [Test Server] Closed.\n");
-      resolve();
-    });
+    server.close(() => { console.log("  [Test Server] Closed.\n"); resolve(); });
   });
 
   // ============================================================
@@ -332,14 +209,12 @@ async function main() {
   console.log("============================================================");
   console.log("KEY TAKEAWAYS");
   console.log("============================================================");
-  console.log("1. http.get() is a shorthand for GET — auto-calls req.end().");
+  console.log("1. http.get() is shorthand for GET — auto-calls req.end().");
   console.log("2. http.request() gives full control but requires manual req.end().");
-  console.log("3. Response body arrives as chunks — collect and concat them.");
-  console.log("4. 4xx/5xx do NOT throw — always check res.statusCode yourself.");
-  console.log("5. For POST, write the body to the request stream before end().");
-  console.log("6. fetch() (Node 18+) is promise-based and much more ergonomic.");
-  console.log("7. fetch() has res.json(), res.text(), res.ok — no chunk wrangling.");
-  console.log("8. Use http.request() when you need stream-level control or old Node.");
+  console.log("3. 4xx/5xx do NOT throw — always check res.statusCode.");
+  console.log("4. For POST, write the body to the request stream before end().");
+  console.log("5. fetch() (Node 18+) is promise-based with res.json()/res.text().");
+  console.log("6. Use http.request() when you need stream-level control.");
   console.log("============================================================\n");
 }
 

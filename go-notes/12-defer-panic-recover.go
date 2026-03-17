@@ -1,28 +1,21 @@
 // ============================================================
 //  FILE 12 : Defer, Panic, and Recover
 // ============================================================
-//  Topic  : defer (LIFO order, argument evaluation), practical
-//           defer patterns (close, unlock, cleanup), panic
-//           (runtime vs deliberate), recover (catching panics),
-//           converting panic to error.
+//  Topic  : defer (LIFO, argument evaluation), practical defer
+//           patterns (close, unlock, timing), panic (runtime vs
+//           deliberate), recover, converting panic to error.
 //
 //  WHY THIS MATTERS:
-//  defer ensures cleanup always happens — files get closed,
-//  locks get released, resources get freed. panic and recover
+//  defer ensures cleanup always happens. panic and recover
 //  handle truly exceptional situations (not normal errors).
-//  Understanding these three mechanisms makes your Go code
-//  robust and leak-free.
+//  These three make Go code robust and leak-free.
 // ============================================================
 
 // ============================================================
-// STORY: NDRF Disaster Response
-// Commander Rathore leads an NDRF disaster response team.
-// Every rescue zone has standard operating procedures: when
-// you enter, a cleanup procedure is SCHEDULED (defer). If an
-// earthquake strikes (panic), the NDRF recovery unit kicks
-// in (recover) to prevent total destruction. But Commander
-// Rathore knows: you don't trigger the earthquake alarm for
-// a broken window — that's what normal error handling is for.
+// STORY: Commander Rathore leads NDRF disaster response. Every
+// rescue zone schedules cleanup (defer). If an earthquake hits
+// (panic), the recovery unit (recover) prevents total collapse.
+// But you don't trigger the alarm for a broken window.
 // ============================================================
 
 package main
@@ -35,212 +28,112 @@ import (
 
 func main() {
 
-	// ──────────────────────────────────────────────────────────────
-	// EXAMPLE BLOCK 1 — Defer Basics (LIFO, Argument Evaluation,
-	//                    Loop Defer), Practical Patterns
-	// ──────────────────────────────────────────────────────────────
+	// ============================================================
+	// EXAMPLE BLOCK 1 — Defer Basics & Practical Patterns
+	// ============================================================
 
 	// ────────────────────────────────────────────────────────────
-	// 1.1 — Defer Basics: LIFO (Last In, First Out) Order
+	// 1.1 — Defer LIFO Order
 	// ────────────────────────────────────────────────────────────
-	// WHY: Deferred calls execute in reverse order when the
-	// surrounding function returns. Think of a stack of plates.
 
-	fmt.Println("--- Defer LIFO Order ---")
-	deferLIFO := func() {
+	fmt.Println("--- Defer LIFO ---")
+	func() {
 		fmt.Println("  Start")
-		defer fmt.Println("  Deferred 1 (first scheduled)")
-		defer fmt.Println("  Deferred 2 (second scheduled)")
-		defer fmt.Println("  Deferred 3 (third scheduled)")
+		defer fmt.Println("  Deferred 1")
+		defer fmt.Println("  Deferred 2")
+		defer fmt.Println("  Deferred 3")
 		fmt.Println("  End")
-	}
-	deferLIFO()
-	// Output:
-	//   Start
-	//   End
-	//   Deferred 3 (third scheduled)
-	//   Deferred 2 (second scheduled)
-	//   Deferred 1 (first scheduled)
-	// WHY: LIFO ensures matched pairs (open/close) unwind correctly.
+	}()
+	// Output: Start, End, 3, 2, 1
 
 	// ────────────────────────────────────────────────────────────
-	// 1.2 — Defer Argument Evaluation: At Defer Time!
+	// 1.2 — Argument Evaluation: At Defer Time!
 	// ────────────────────────────────────────────────────────────
-	// WHY: Arguments to deferred functions are evaluated WHEN
-	// the defer statement executes, NOT when the function runs.
 
-	fmt.Println("\n--- Defer Argument Evaluation ---")
-	deferEval := func() {
+	fmt.Println("\n--- Argument Evaluation ---")
+	func() {
 		x := 10
 		defer fmt.Printf("  Deferred x = %d (captured at defer time)\n", x)
 		x = 20
 		fmt.Printf("  Current x = %d\n", x)
-	}
-	deferEval()
-	// Output:
-	//   Current x = 20
-	//   Deferred x = 10 (captured at defer time)
-	// WHY: x was 10 when defer was called, so 10 is captured.
+	}()
 
-	// To capture the FINAL value, use a closure:
-	fmt.Println("\n--- Defer with Closure (captures final value) ---")
-	deferClosure := func() {
+	// To capture FINAL value, use a closure:
+	fmt.Println("\n--- Closure Captures Final Value ---")
+	func() {
 		x := 10
-		defer func() {
-			fmt.Printf("  Closure sees x = %d (final value)\n", x)
-		}()
+		defer func() { fmt.Printf("  Closure x = %d\n", x) }()
 		x = 20
-		fmt.Printf("  Current x = %d\n", x)
-	}
-	deferClosure()
-	// Output:
-	//   Current x = 20
-	//   Closure sees x = 20 (final value)
-	// WHY: The closure captures the variable, not the value.
+	}()
 
 	// ────────────────────────────────────────────────────────────
-	// 1.3 — Defer in Loops: Watch Out!
+	// 1.3 — Defer in Loops: Wrap in Anonymous Func
 	// ────────────────────────────────────────────────────────────
-	// WHY: Defer runs when the FUNCTION exits, not the loop.
-	// Deferring in a loop can cause resource leaks.
 
-	fmt.Println("\n--- Defer in Loops (Be Careful) ---")
-	deferLoop := func() {
-		for i := 0; i < 3; i++ {
-			defer fmt.Printf("  Loop defer i=%d\n", i)
-		}
-		fmt.Println("  Loop finished")
-	}
-	deferLoop()
-	// Output:
-	//   Loop finished
-	//   Loop defer i=2
-	//   Loop defer i=1
-	//   Loop defer i=0
-	// WHY: All 3 defers stack up and run AFTER the function returns.
-
-	// Better pattern: wrap in an immediately-called function
-	fmt.Println("\n--- Defer in Loops (Correct Pattern) ---")
+	fmt.Println("\n--- Defer in Loops (correct) ---")
 	for i := 0; i < 3; i++ {
 		func(n int) {
-			defer fmt.Printf("  Cleanup for iteration %d\n", n)
-			fmt.Printf("  Processing iteration %d\n", n)
+			defer fmt.Printf("  Cleanup %d\n", n)
+			fmt.Printf("  Process %d\n", n)
 		}(i)
 	}
-	// Output:
-	//   Processing iteration 0
-	//   Cleanup for iteration 0
-	//   Processing iteration 1
-	//   Cleanup for iteration 1
-	//   Processing iteration 2
-	//   Cleanup for iteration 2
-	// WHY: Each iteration's anonymous function has its own defer scope.
 
 	// ────────────────────────────────────────────────────────────
-	// 1.4 — Practical Pattern: Simulated File Close
+	// 1.4 — Practical: File Close Pattern
 	// ────────────────────────────────────────────────────────────
-	// WHY: The most common defer pattern — open a resource,
-	// immediately defer its cleanup.
+	// Open resource, immediately defer cleanup.
 
-	fmt.Println("\n--- Practical: File Close Pattern ---")
-	type MockFile struct {
-		Name string
-	}
-	openFile := func(name string) (*MockFile, error) {
-		fmt.Printf("  Opening %s\n", name)
-		return &MockFile{Name: name}, nil
-	}
-	closeFile := func(f *MockFile) {
-		fmt.Printf("  Closing %s\n", f.Name)
-	}
+	fmt.Println("\n--- File Close Pattern ---")
+	type MockFile struct{ Name string }
 
-	processFile := func(filename string) error {
-		f, err := openFile(filename)
-		if err != nil {
-			return err
-		}
-		defer closeFile(f) // guaranteed cleanup!
-
-		fmt.Printf("  Reading from %s\n", f.Name)
-		fmt.Printf("  Processing %s data\n", f.Name)
-		return nil
+	processFile := func(name string) {
+		f := &MockFile{Name: name}
+		fmt.Printf("  Opened %s\n", f.Name)
+		defer fmt.Printf("  Closed %s\n", f.Name)
+		fmt.Printf("  Processing %s\n", f.Name)
 	}
-
-	_ = processFile("disaster-report.txt")
-	// Output:
-	//   Opening disaster-report.txt
-	//   Reading from disaster-report.txt
-	//   Processing disaster-report.txt data
-	//   Closing disaster-report.txt
-	// WHY: closeFile runs even if processing panics or returns early.
+	processFile("report.txt")
 
 	// ────────────────────────────────────────────────────────────
-	// 1.5 — Practical Pattern: Mutex Unlock
+	// 1.5 — Practical: Mutex Unlock
 	// ────────────────────────────────────────────────────────────
-	// WHY: defer mu.Unlock() right after mu.Lock() ensures the
-	// lock is ALWAYS released, even on panic.
 
-	fmt.Println("\n--- Practical: Mutex Unlock ---")
+	fmt.Println("\n--- Mutex Unlock ---")
 	var mu sync.Mutex
 	counter := 0
-
-	safeIncrement := func() {
+	inc := func() {
 		mu.Lock()
-		defer mu.Unlock() // runs when function exits
+		defer mu.Unlock()
 		counter++
-		fmt.Printf("  Counter incremented to %d\n", counter)
 	}
-
-	safeIncrement()
-	safeIncrement()
-	safeIncrement()
-	fmt.Println("  Final counter:", counter)
-	// Output:
-	//   Counter incremented to 1
-	//   Counter incremented to 2
-	//   Counter incremented to 3
-	//   Final counter: 3
+	inc()
+	inc()
+	inc()
+	fmt.Println("  Counter:", counter)
 
 	// ────────────────────────────────────────────────────────────
-	// 1.6 — Practical Pattern: Timing with Defer
+	// 1.6 — Practical: Trace Enter/Exit
 	// ────────────────────────────────────────────────────────────
 
-	fmt.Println("\n--- Practical: Trace Enter/Exit ---")
+	fmt.Println("\n--- Trace Enter/Exit ---")
 	trace := func(name string) func() {
 		fmt.Printf("  ENTER %s\n", name)
-		return func() {
-			fmt.Printf("  EXIT  %s\n", name)
-		}
+		return func() { fmt.Printf("  EXIT  %s\n", name) }
 	}
+	func() {
+		defer trace("rescue")()
+		fmt.Println("  ... conducting operation ...")
+	}()
 
-	simulateWork := func() {
-		defer trace("simulateWork")()
-		fmt.Println("  ... conducting rescue operation ...")
-	}
-	simulateWork()
-	// Output:
-	//   ENTER simulateWork
-	//   ... conducting rescue operation ...
-	//   EXIT  simulateWork
-	// WHY: trace() runs immediately (enter), the returned func
-	// is deferred (exit). Elegant enter/exit logging.
-
-	// ──────────────────────────────────────────────────────────────
-	// EXAMPLE BLOCK 2 — Panic (Runtime vs Deliberate), Recover,
-	//                    Converting Panic to Error, When to Panic
-	// ──────────────────────────────────────────────────────────────
+	// ============================================================
+	// EXAMPLE BLOCK 2 — Panic, Recover, Panic-to-Error
+	// ============================================================
 
 	// ────────────────────────────────────────────────────────────
-	// 2.1 — Runtime Panics
+	// 2.1 — Runtime Panics (recovered safely)
 	// ────────────────────────────────────────────────────────────
-	// WHY: Some operations cause runtime panics automatically:
-	//   - nil pointer dereference
-	//   - index out of bounds
-	//   - division by zero (integer)
-	//   - closing a closed channel
-	//   - type assertion failure
 
-	fmt.Println("\n--- Runtime Panics (examples, recovered safely) ---")
+	fmt.Println("\n--- Runtime Panics ---")
 	safeDemo := func(name string, fn func()) {
 		defer func() {
 			if r := recover(); r != nil {
@@ -250,110 +143,54 @@ func main() {
 		fn()
 	}
 
-	// Index out of bounds
-	safeDemo("out of bounds", func() {
-		s := []int{1, 2, 3}
-		_ = s[10]
-	})
-	// Output:   RECOVERED [out of bounds]: runtime error: index out of range [10] with length 3
-
-	// Nil pointer dereference
-	safeDemo("nil pointer", func() {
-		var p *int
-		_ = *p
-	})
-	// Output:   RECOVERED [nil pointer]: runtime error: invalid memory address or nil pointer dereference
-
-	// Nil map write
-	safeDemo("nil map", func() {
-		var m map[string]int
-		m["key"] = 1
-	})
-	// Output:   RECOVERED [nil map]: assignment to entry in nil map
+	safeDemo("out of bounds", func() { _ = []int{1}[10] })
+	safeDemo("nil pointer", func() { var p *int; _ = *p })
+	safeDemo("nil map", func() { var m map[string]int; m["k"] = 1 })
 
 	// ────────────────────────────────────────────────────────────
-	// 2.2 — Deliberate Panic
+	// 2.2 — Deliberate Panic (programmer errors only)
 	// ────────────────────────────────────────────────────────────
-	// WHY: Use panic() deliberately only for PROGRAMMER ERRORS —
-	// situations that should never happen if the code is correct.
 
 	fmt.Println("\n--- Deliberate Panic ---")
-	mustParseConfig := func(configStr string) map[string]string {
-		// In real code, this would parse a config file.
-		// If the format is wrong, it's a programmer error.
-		if configStr == "" {
-			panic("mustParseConfig: config string cannot be empty")
+	mustParse := func(s string) map[string]string {
+		if s == "" {
+			panic("config string cannot be empty")
 		}
-		config := make(map[string]string)
-		for _, line := range strings.Split(configStr, "\n") {
+		cfg := make(map[string]string)
+		for _, line := range strings.Split(s, "\n") {
 			parts := strings.SplitN(line, "=", 2)
 			if len(parts) == 2 {
-				config[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+				cfg[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 			}
 		}
-		return config
+		return cfg
 	}
+	fmt.Println("  Config:", mustParse("zone=4\nseverity=high"))
 
-	config := mustParseConfig("zone=earthquake-zone-4\nseverity=high")
-	fmt.Println("  Config:", config)
-	// Output:   Config: map[severity:high zone:earthquake-zone-4]
-
-	// Recover from bad input
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Println("  Caught panic:", r)
+				fmt.Println("  Caught:", r)
 			}
 		}()
-		mustParseConfig("") // this panics
+		mustParse("")
 	}()
-	// Output:   Caught panic: mustParseConfig: config string cannot be empty
 
 	// ────────────────────────────────────────────────────────────
-	// 2.3 — Recover: Only Works in Deferred Functions
+	// 2.3 — Converting Panic to Error (Production Pattern)
 	// ────────────────────────────────────────────────────────────
-	// WHY: recover() returns nil if called outside a deferred
-	// function or when there's no panic. It STOPS the panic.
 
-	fmt.Println("\n--- Recover Basics ---")
-	riskyOperation := func() (result string, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				err = fmt.Errorf("panic recovered: %v", r)
-			}
-		}()
-
-		// Simulate something going wrong
-		panic("building collapse detected!")
-
-		// This line never executes
-		// return "success", nil
-	}
-
-	result, err := riskyOperation()
-	fmt.Println("Result:", result)
-	// Output: Result:
-	fmt.Println("Error:", err)
-	// Output: Error: panic recovered: building collapse detected!
-	// WHY: The panic was caught and converted to an error.
-
-	// ────────────────────────────────────────────────────────────
-	// 2.4 — Converting Panic to Error (Production Pattern)
-	// ────────────────────────────────────────────────────────────
-	// WHY: Library/HTTP handler code should convert panics to
-	// errors — never let a panic crash the whole server.
-
-	fmt.Println("\n--- Converting Panic to Error ---")
+	fmt.Println("\n--- Panic to Error ---")
 	safeExecute := func(fn func()) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				switch v := r.(type) {
 				case error:
-					err = fmt.Errorf("caught panic (error): %w", v)
+					err = fmt.Errorf("panic (error): %w", v)
 				case string:
-					err = fmt.Errorf("caught panic (string): %s", v)
+					err = fmt.Errorf("panic (string): %s", v)
 				default:
-					err = fmt.Errorf("caught panic (unknown): %v", v)
+					err = fmt.Errorf("panic: %v", v)
 				}
 			}
 		}()
@@ -361,74 +198,30 @@ func main() {
 		return nil
 	}
 
-	// Test with string panic
-	err = safeExecute(func() {
-		panic("earthquake in zone 4")
-	})
+	err := safeExecute(func() { panic("earthquake zone 4") })
 	fmt.Println("  Recovered:", err)
-	// Output:   Recovered: caught panic (string): earthquake in zone 4
 
-	// Test with no panic
-	err = safeExecute(func() {
-		fmt.Println("  Normal operation — no disaster")
-	})
+	err = safeExecute(func() { fmt.Println("  Normal operation") })
 	fmt.Println("  Error:", err)
-	// Output:
-	//   Normal operation — no disaster
-	//   Error: <nil>
 
 	// ────────────────────────────────────────────────────────────
-	// 2.5 — Defer Runs Even During Panic
+	// 2.4 — Defers Run During Panic
 	// ────────────────────────────────────────────────────────────
-	// WHY: Deferred functions ALWAYS run — even when unwinding
-	// from a panic. This is why defer is reliable for cleanup.
 
-	fmt.Println("\n--- Defer Runs During Panic ---")
+	fmt.Println("\n--- Defers Run During Panic ---")
 	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				fmt.Println("  Recovered panic:", r)
-			}
-		}()
-		defer fmt.Println("  Cleanup 1: evacuating survivors")
+		defer func() { recover() }()
+		defer fmt.Println("  Cleanup 1: evacuating")
 		defer fmt.Println("  Cleanup 2: securing perimeter")
-
-		fmt.Println("  About to panic...")
-		panic("aftershock detected!")
+		panic("aftershock!")
 	}()
-	// Output:
-	//   About to panic...
-	//   Cleanup 2: securing perimeter
-	//   Cleanup 1: evacuating survivors
-	//   Recovered panic: aftershock detected!
-	// WHY: All defers ran in LIFO order before recover caught the panic.
 
 	// ────────────────────────────────────────────────────────────
-	// 2.6 — When to Panic vs Return Error
+	// 2.5 — Safe Handler Pattern
 	// ────────────────────────────────────────────────────────────
 
-	fmt.Println("\n--- When to Panic vs Return Error ---")
-	fmt.Println("USE panic() when:")
-	fmt.Println("  1. Initialization fails (bad config at startup)")
-	fmt.Println("  2. Programmer error (impossible state, violated invariant)")
-	fmt.Println("  3. Must-succeed functions (MustCompile for regex)")
-	fmt.Println("")
-	fmt.Println("RETURN error when:")
-	fmt.Println("  1. I/O operations (file, network, database)")
-	fmt.Println("  2. User input validation")
-	fmt.Println("  3. Any expected failure condition")
-	fmt.Println("  4. Library functions (let the caller decide)")
-	fmt.Println("")
-	fmt.Println("GOLDEN RULE: If in doubt, return an error. Panic is exceptional.")
-
-	// ────────────────────────────────────────────────────────────
-	// 2.7 — Complete Example: HTTP Handler Safety Wrapper
-	// ────────────────────────────────────────────────────────────
-
-	fmt.Println("\n--- Complete: Safe Handler Pattern ---")
-	type Request struct {
-		Path string
-	}
+	fmt.Println("\n--- Safe Handler ---")
+	type Request struct{ Path string }
 	type Response struct {
 		Status int
 		Body   string
@@ -438,47 +231,38 @@ func main() {
 		return func(req Request) (resp Response) {
 			defer func() {
 				if r := recover(); r != nil {
-					fmt.Printf("  PANIC in handler for %s: %v\n", req.Path, r)
-					resp = Response{Status: 500, Body: "Internal Server Error"}
+					resp = Response{500, "Internal Server Error"}
 				}
 			}()
 			return handler(req)
 		}
 	}
 
-	// Normal handler
-	healthHandler := safeHandler(func(req Request) Response {
-		return Response{Status: 200, Body: "OK"}
-	})
+	ok := safeHandler(func(r Request) Response { return Response{200, "OK"} })
+	bad := safeHandler(func(r Request) Response { panic("bug") })
 
-	// Buggy handler that panics
-	buggyHandler := safeHandler(func(req Request) Response {
-		panic("null reference in handler")
-	})
+	fmt.Printf("  /health → %d\n", ok(Request{"/health"}).Status)
+	fmt.Printf("  /buggy  → %d\n", bad(Request{"/buggy"}).Status)
 
-	resp := healthHandler(Request{Path: "/health"})
-	fmt.Printf("  /health → %d %s\n", resp.Status, resp.Body)
-	// Output:   /health → 200 OK
+	// ────────────────────────────────────────────────────────────
+	// 2.6 — When to Panic vs Return Error
+	// ────────────────────────────────────────────────────────────
 
-	resp = buggyHandler(Request{Path: "/buggy"})
-	fmt.Printf("  /buggy  → %d %s\n", resp.Status, resp.Body)
-	// Output:
-	//   PANIC in handler for /buggy: null reference in handler
-	//   /buggy  → 500 Internal Server Error
+	fmt.Println("\n--- Panic vs Error ---")
+	fmt.Println("PANIC: init failure, programmer error, MustXxx funcs")
+	fmt.Println("ERROR: I/O, user input, any expected failure")
+	fmt.Println("RULE: If in doubt, return an error.")
 
 	// ============================================================
 	// KEY TAKEAWAYS
 	// ============================================================
-	// 1. defer executes in LIFO order when the function returns.
-	// 2. Deferred arguments are evaluated at defer time, NOT execution
-	//    time. Use closures to capture final values.
-	// 3. Defer in loops stacks up — wrap in anonymous func if needed.
-	// 4. Common defer patterns: close files, unlock mutexes, log exit.
-	// 5. panic stops normal execution and unwinds the stack.
+	// 1. defer executes in LIFO order when function returns.
+	// 2. Args evaluated at defer time. Use closures for final values.
+	// 3. Defer in loops: wrap in anonymous func.
+	// 4. Common: close files, unlock mutexes, log entry/exit.
+	// 5. panic stops execution and unwinds the stack.
 	// 6. recover() only works inside a deferred function.
-	// 7. Deferred functions run EVEN during panic — cleanup is safe.
+	// 7. Defers run even during panic — cleanup is reliable.
 	// 8. Convert panics to errors in library/handler code.
-	// 9. Use panic for programmer errors and init failures ONLY.
-	// 10. GOLDEN RULE: Return errors for expected failures,
-	//     panic only for truly exceptional situations.
+	// 9. Panic for programmer errors only. Return errors otherwise.
 }

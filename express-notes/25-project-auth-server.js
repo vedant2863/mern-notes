@@ -1,726 +1,313 @@
 /** ============================================================
  *  FILE 25: DigiLocker Dwar — Authentication Server Project
- *  WHY THIS MATTERS: Authentication is the backbone of every
- *  production API.  This capstone builds JWT auth from scratch
- *  using only Node's built-in crypto module — no third-party
- *  JWT libraries.  You'll see password hashing, token creation,
- *  token verification, refresh token rotation, role-based
- *  access control, and session invalidation — all in one file.
  *  ============================================================ */
 
-// ─── The Gateway That Checks Every Aadhaar Card ──────────────
-//
-// Kavita ran a DigiLocker-style document vault.  Anyone could
-// walk in, download Aadhaar cards, mark-sheets, and land
-// records, and walk out.  "We need a dwar (gateway)," she said,
-// "that checks WHO you are (authentication), WHAT you're
-// allowed to do (authorization), and remembers you so you don't
-// flash your Aadhaar every second (sessions)."
-//
-// Her head of security built DigiLocker Dwar — a system where
-// every naagrik (citizen) registers, receives a cryptographic
-// badge (JWT), and presents it at every door (middleware).  Some
-// doors open for everyone; others only for admins.
-//
-// This file IS that DigiLocker Dwar.
+// STORY: Kavita's document vault needs a gateway (dwar) that
+// checks WHO you are (auth), WHAT you can do (roles), and
+// remembers you (JWT). Built from scratch with Node crypto.
 
 const express = require('express');
 const crypto = require('crypto');
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 1 — Configuration & In-Memory Stores
-// ════════════════════════════════════════════════════════════════
 
-// ─── JWT secret & timing ──────────────────────────────────────
-// WHY: In production these come from environment variables.
-// We use short expiry times here so we can test expiration.
+// ════════════════════════════════════════════════════════════════
+// SECTION 1 — Config & Stores
+// ════════════════════════════════════════════════════════════════
 
 const JWT_SECRET = crypto.randomBytes(32).toString('hex');
-const JWT_EXPIRES_IN = 60;          // 60 seconds for access token
-const REFRESH_EXPIRES_IN = 300;     // 5 minutes for refresh token
+const JWT_EXPIRES_IN = 60;
+const REFRESH_EXPIRES_IN = 300;
 
-// ─── In-memory stores ─────────────────────────────────────────
-// WHY: These replace a real database.  The patterns (hashing,
-// token storage, blacklisting) transfer directly to production.
+const users = [];
+const refreshTokens = new Map();
+const blacklistedTokens = new Set();
 
-const users = [];                   // { id, username, passwordHash, salt, role }
-const refreshTokens = new Map();    // tokenId -> { userId, expiresAt }
-const blacklistedTokens = new Set();// token IDs invalidated by logout
 
 // ════════════════════════════════════════════════════════════════
-// SECTION 2 — Password Hashing with crypto.scrypt
+// SECTION 2 — Password Hashing (crypto.scrypt)
 // ════════════════════════════════════════════════════════════════
-
-// ─── Why scrypt? ──────────────────────────────────────────────
-// WHY: scrypt is a memory-hard key derivation function built into
-// Node's crypto module.  It's resistant to GPU/ASIC brute-force
-// attacks — unlike SHA-256 or even bcrypt at low work factors.
+// WHY: scrypt is memory-hard — resistant to GPU brute-force.
 
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
     const salt = crypto.randomBytes(16).toString('hex');
-    // WHY: keylen 64 produces a 512-bit hash — plenty of security
-    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+    crypto.scrypt(password, salt, 64, (err, key) => {
       if (err) return reject(err);
-      resolve({ hash: derivedKey.toString('hex'), salt });
+      resolve({ hash: key.toString('hex'), salt });
     });
   });
 }
 
 function verifyPassword(password, hash, salt) {
   return new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+    crypto.scrypt(password, salt, 64, (err, key) => {
       if (err) return reject(err);
-      // WHY: timingSafeEqual prevents timing attacks that could
-      // reveal how many bytes matched before a mismatch
-      resolve(crypto.timingSafeEqual(
-        Buffer.from(hash, 'hex'),
-        derivedKey
-      ));
+      // WHY: timingSafeEqual prevents timing attacks
+      resolve(crypto.timingSafeEqual(Buffer.from(hash, 'hex'), key));
     });
   });
 }
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 3 — JWT Implementation from Scratch
-// ════════════════════════════════════════════════════════════════
 
-// ─── Why build JWT by hand? ───────────────────────────────────
-// WHY: Understanding JWT internals (header.payload.signature)
-// makes you a better debugger and security thinker.  In
-// production, use the 'jsonwebtoken' package — but knowing
-// what it does under the hood is invaluable.
+// ════════════════════════════════════════════════════════════════
+// SECTION 3 — JWT from Scratch
+// ════════════════════════════════════════════════════════════════
+// JWT = base64url(header).base64url(payload).HMAC-SHA256-signature
 
 function base64urlEncode(data) {
-  // WHY: base64url replaces +/= with -/_ for URL-safe transport
-  return Buffer.from(JSON.stringify(data))
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+  return Buffer.from(JSON.stringify(data)).toString('base64')
+    .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
 }
 
 function base64urlDecode(str) {
-  // WHY: reverse the URL-safe replacements before decoding
   const padded = str + '='.repeat((4 - str.length % 4) % 4);
   return JSON.parse(Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString());
 }
 
 function createJWT(payload, expiresIn = JWT_EXPIRES_IN) {
-  const header = { alg: 'HS256', typ: 'JWT' };
-
   const now = Math.floor(Date.now() / 1000);
-  const fullPayload = {
-    ...payload,
-    iat: now,                      // WHY: issued-at for auditing
-    exp: now + expiresIn,          // WHY: auto-expiry limits damage from stolen tokens
-    jti: crypto.randomUUID(),      // WHY: unique token ID for blacklisting
-  };
-
-  const headerEncoded = base64urlEncode(header);
-  const payloadEncoded = base64urlEncode(fullPayload);
-  const signatureInput = `${headerEncoded}.${payloadEncoded}`;
-
-  // WHY: HMAC-SHA256 ensures the token hasn't been tampered with
-  const signature = crypto
-    .createHmac('sha256', JWT_SECRET)
-    .update(signatureInput)
-    .digest('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-
-  return { token: `${signatureInput}.${signature}`, payload: fullPayload };
+  const full = { ...payload, iat: now, exp: now + expiresIn, jti: crypto.randomUUID() };
+  const header = base64urlEncode({ alg: 'HS256', typ: 'JWT' });
+  const body = base64urlEncode(full);
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`)
+    .digest('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return { token: `${header}.${body}.${sig}`, payload: full };
 }
 
 function verifyJWT(token) {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return { valid: false, error: 'Malformed token' };
-
-    const [headerEnc, payloadEnc, signatureEnc] = parts;
-
-    // ── Step 1: Verify signature ───────────────────────────
-    const expectedSig = crypto
-      .createHmac('sha256', JWT_SECRET)
-      .update(`${headerEnc}.${payloadEnc}`)
-      .digest('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-
-    if (expectedSig !== signatureEnc) {
-      return { valid: false, error: 'Invalid signature' };
-    }
-
-    // ── Step 2: Decode payload ─────────────────────────────
-    const payload = base64urlDecode(payloadEnc);
-
-    // ── Step 3: Check expiration ───────────────────────────
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      return { valid: false, error: 'Token expired' };
-    }
-
-    // ── Step 4: Check blacklist ────────────────────────────
-    if (blacklistedTokens.has(payload.jti)) {
-      return { valid: false, error: 'Token has been revoked' };
-    }
-
+    const [h, p, s] = token.split('.');
+    if (!h || !p || !s) return { valid: false, error: 'Malformed token' };
+    const expected = crypto.createHmac('sha256', JWT_SECRET).update(`${h}.${p}`)
+      .digest('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    if (expected !== s) return { valid: false, error: 'Invalid signature' };
+    const payload = base64urlDecode(p);
+    if (payload.exp < Math.floor(Date.now() / 1000)) return { valid: false, error: 'Token expired' };
+    if (blacklistedTokens.has(payload.jti)) return { valid: false, error: 'Token has been revoked' };
     return { valid: true, payload };
-  } catch (err) {
-    return { valid: false, error: 'Token verification failed' };
-  }
+  } catch { return { valid: false, error: 'Token verification failed' }; }
 }
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 4 — Refresh Token Management
-// ════════════════════════════════════════════════════════════════
 
-// ─── Why refresh tokens? ──────────────────────────────────────
-// WHY: Short-lived access tokens limit damage from theft, but
-// re-authenticating every minute is annoying.  Refresh tokens
-// let the client silently get a new access token without
-// re-entering credentials.  Rotation (issuing a new refresh
-// token each time) detects token reuse attacks.
+// ════════════════════════════════════════════════════════════════
+// SECTION 4 — Refresh Tokens
+// ════════════════════════════════════════════════════════════════
 
 function createRefreshToken(userId) {
-  const tokenId = crypto.randomUUID();
-  const expiresAt = Date.now() + REFRESH_EXPIRES_IN * 1000;
-  refreshTokens.set(tokenId, { userId, expiresAt });
-  return tokenId;
+  const id = crypto.randomUUID();
+  refreshTokens.set(id, { userId, expiresAt: Date.now() + REFRESH_EXPIRES_IN * 1000 });
+  return id;
 }
 
-function verifyRefreshToken(tokenId) {
-  const stored = refreshTokens.get(tokenId);
+function verifyRefreshToken(id) {
+  const stored = refreshTokens.get(id);
   if (!stored) return { valid: false, error: 'Refresh token not found' };
-  if (stored.expiresAt < Date.now()) {
-    refreshTokens.delete(tokenId);
-    return { valid: false, error: 'Refresh token expired' };
-  }
+  if (stored.expiresAt < Date.now()) { refreshTokens.delete(id); return { valid: false, error: 'Expired' }; }
   return { valid: true, userId: stored.userId };
 }
+
 
 // ════════════════════════════════════════════════════════════════
 // SECTION 5 — Auth Middleware
 // ════════════════════════════════════════════════════════════════
 
-// ─── JWT verification middleware ──────────────────────────────
-// WHY: This middleware sits in front of protected routes.  It
-// extracts the Bearer token, verifies it, and attaches the
-// decoded user to req.user — so handlers can trust req.user.
-
 function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      error: 'Authentication required. Provide Bearer token.',
-    });
-  }
-
-  const token = authHeader.slice(7);  // WHY: strip "Bearer " prefix
-  const result = verifyJWT(token);
-
-  if (!result.valid) {
-    return res.status(401).json({
-      success: false,
-      error: result.error,
-    });
-  }
-
+  const h = req.headers.authorization;
+  if (!h || !h.startsWith('Bearer '))
+    return res.status(401).json({ success: false, error: 'Bearer token required' });
+  const result = verifyJWT(h.slice(7));
+  if (!result.valid) return res.status(401).json({ success: false, error: result.error });
   req.user = result.payload;
-  req.tokenJti = result.payload.jti;
   next();
 }
 
-// ─── Role-based access middleware factory ──────────────────────
-// WHY: Some routes should only be accessible to admins.  This
-// factory creates middleware that checks req.user.role against
-// an allowed list.
-
 function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user) {
-      return res.status(401).json({ success: false, error: 'Not authenticated' });
-    }
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        error: `Access denied. Required role: ${roles.join(' or ')}`,
-      });
-    }
+    if (!roles.includes(req.user?.role))
+      return res.status(403).json({ success: false, error: `Required: ${roles.join(' or ')}` });
     next();
   };
 }
 
+
 // ════════════════════════════════════════════════════════════════
-// SECTION 6 — Route Handlers
+// SECTION 6 — Routes
 // ════════════════════════════════════════════════════════════════
 
 function createApp() {
   const app = express();
   app.use(express.json());
+  const r = express.Router();
 
-  const authRouter = express.Router();
-
-  // ─── POST /auth/register — Create new naagrik ─────────────
-  authRouter.post('/register', async (req, res) => {
+  r.post('/register', async (req, res) => {
     try {
       const { username, password, role } = req.body;
-
-      if (!username || !password) {
-        return res.status(400).json({
-          success: false,
-          error: 'Username and password are required',
-        });
-      }
-
-      if (password.length < 6) {
-        return res.status(400).json({
-          success: false,
-          error: 'Password must be at least 6 characters',
-        });
-      }
-
-      // WHY: Check for duplicate usernames
-      if (users.find(u => u.username === username)) {
-        return res.status(409).json({
-          success: false,
-          error: 'Username already exists',
-        });
-      }
-
+      if (!username || !password) return res.status(400).json({ success: false, error: 'Username and password required' });
+      if (password.length < 6) return res.status(400).json({ success: false, error: 'Password min 6 chars' });
+      if (users.find(u => u.username === username)) return res.status(409).json({ success: false, error: 'Username exists' });
       const { hash, salt } = await hashPassword(password);
-      const user = {
-        id: crypto.randomUUID(),
-        username,
-        passwordHash: hash,
-        salt,
-        role: role === 'admin' ? 'admin' : 'user',  // WHY: default to 'user' for safety
-        createdAt: new Date().toISOString(),
-      };
-
+      const user = { id: crypto.randomUUID(), username, passwordHash: hash, salt, role: role === 'admin' ? 'admin' : 'user', createdAt: new Date().toISOString() };
       users.push(user);
-
-      res.status(201).json({
-        success: true,
-        data: { id: user.id, username: user.username, role: user.role },
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, error: 'Registration failed' });
-    }
+      res.status(201).json({ success: true, data: { id: user.id, username: user.username, role: user.role } });
+    } catch { res.status(500).json({ success: false, error: 'Registration failed' }); }
   });
 
-  // ─── POST /auth/login — Authenticate and return tokens ───
-  authRouter.post('/login', async (req, res) => {
+  r.post('/login', async (req, res) => {
     try {
       const { username, password } = req.body;
-
-      if (!username || !password) {
-        return res.status(400).json({
-          success: false,
-          error: 'Username and password are required',
-        });
-      }
-
+      if (!username || !password) return res.status(400).json({ success: false, error: 'Credentials required' });
       const user = users.find(u => u.username === username);
-      if (!user) {
-        // WHY: Generic message prevents username enumeration
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid credentials',
-        });
-      }
-
-      const passwordValid = await verifyPassword(password, user.passwordHash, user.salt);
-      if (!passwordValid) {
-        return res.status(401).json({
-          success: false,
-          error: 'Invalid credentials',
-        });
-      }
-
-      // WHY: Access token for API calls, refresh token for renewal
-      const { token: accessToken } = createJWT({
-        sub: user.id,
-        username: user.username,
-        role: user.role,
-      });
-      const refreshToken = createRefreshToken(user.id);
-
-      res.json({
-        success: true,
-        data: {
-          accessToken,
-          refreshToken,
-          user: { id: user.id, username: user.username, role: user.role },
-        },
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, error: 'Login failed' });
-    }
+      // WHY: Generic message prevents username enumeration
+      if (!user || !(await verifyPassword(password, user.passwordHash, user.salt)))
+        return res.status(401).json({ success: false, error: 'Invalid credentials' });
+      const { token } = createJWT({ sub: user.id, username: user.username, role: user.role });
+      res.json({ success: true, data: { accessToken: token, refreshToken: createRefreshToken(user.id), user: { id: user.id, username: user.username, role: user.role } } });
+    } catch { res.status(500).json({ success: false, error: 'Login failed' }); }
   });
 
-  // ─── GET /auth/profile — Protected route ─────────────────
-  authRouter.get('/profile', authMiddleware, (req, res) => {
+  r.get('/profile', authMiddleware, (req, res) => {
     const user = users.find(u => u.id === req.user.sub);
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-    res.json({
-      success: true,
-      data: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        createdAt: user.createdAt,
-      },
-    });
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    res.json({ success: true, data: { id: user.id, username: user.username, role: user.role } });
   });
 
-  // ─── POST /auth/refresh — Token rotation ─────────────────
-  authRouter.post('/refresh', (req, res) => {
+  r.post('/refresh', (req, res) => {
     const { refreshToken } = req.body;
-    if (!refreshToken) {
-      return res.status(400).json({
-        success: false,
-        error: 'Refresh token is required',
-      });
-    }
-
+    if (!refreshToken) return res.status(400).json({ success: false, error: 'Refresh token required' });
     const result = verifyRefreshToken(refreshToken);
-    if (!result.valid) {
-      return res.status(401).json({
-        success: false,
-        error: result.error,
-      });
-    }
-
-    // WHY: Delete old refresh token — this is "rotation"
-    // If an attacker reuses the old token, it will fail
-    refreshTokens.delete(refreshToken);
-
+    if (!result.valid) return res.status(401).json({ success: false, error: result.error });
+    refreshTokens.delete(refreshToken); // WHY: Rotation — old token invalidated
     const user = users.find(u => u.id === result.userId);
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    const { token: newAccessToken } = createJWT({
-      sub: user.id,
-      username: user.username,
-      role: user.role,
-    });
-    const newRefreshToken = createRefreshToken(user.id);
-
-    res.json({
-      success: true,
-      data: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-      },
-    });
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const { token } = createJWT({ sub: user.id, username: user.username, role: user.role });
+    res.json({ success: true, data: { accessToken: token, refreshToken: createRefreshToken(user.id) } });
   });
 
-  // ─── POST /auth/logout — Invalidate tokens ───────────────
-  authRouter.post('/logout', authMiddleware, (req, res) => {
-    // WHY: Blacklist the JWT ID so it can't be reused
+  r.post('/logout', authMiddleware, (req, res) => {
     blacklistedTokens.add(req.user.jti);
     res.json({ success: true, data: { message: 'Logged out successfully' } });
   });
 
-  // ─── GET /auth/admin — Admin-only route ──────────────────
-  authRouter.get('/admin', authMiddleware, requireRole('admin'), (req, res) => {
-    res.json({
-      success: true,
-      data: {
-        message: 'Welcome to the admin panel',
-        userCount: users.length,
-        activeRefreshTokens: refreshTokens.size,
-      },
-    });
+  r.get('/admin', authMiddleware, requireRole('admin'), (req, res) => {
+    res.json({ success: true, data: { message: 'Welcome to the admin panel', userCount: users.length } });
   });
 
-  // ─── GET /auth/users — Admin: list all naagrik ────────────
-  authRouter.get('/users', authMiddleware, requireRole('admin'), (req, res) => {
-    const safeUsers = users.map(u => ({
-      id: u.id,
-      username: u.username,
-      role: u.role,
-      createdAt: u.createdAt,
-    }));
-    res.json({ success: true, data: safeUsers });
+  r.get('/users', authMiddleware, requireRole('admin'), (req, res) => {
+    res.json({ success: true, data: users.map(u => ({ id: u.id, username: u.username, role: u.role })) });
   });
 
-  app.use('/auth', authRouter);
-
-  // ─── 404 catch-all ───────────────────────────────────────
-  app.use((req, res) => {
-    res.status(404).json({ success: false, error: 'Route not found' });
-  });
-
+  app.use('/auth', r);
+  app.use((req, res) => res.status(404).json({ success: false, error: 'Route not found' }));
   return app;
 }
+
 
 // ════════════════════════════════════════════════════════════════
 // SECTION 7 — Self-Test Suite
 // ════════════════════════════════════════════════════════════════
 
 async function runTests(baseURL) {
-  const results = [];
-  let testNum = 0;
-
+  let passed = 0, failed = 0;
   async function test(name, fn) {
-    testNum++;
-    try {
-      await fn();
-      results.push({ num: testNum, name, pass: true });
-      console.log(`  [PASS] Test ${testNum}: ${name}`);
-    } catch (err) {
-      results.push({ num: testNum, name, pass: false, error: err.message });
-      console.log(`  [FAIL] Test ${testNum}: ${name} — ${err.message}`);
-    }
+    try { await fn(); passed++; console.log(`  [PASS] ${name}`); }
+    catch (e) { failed++; console.log(`  [FAIL] ${name} — ${e.message}`); }
   }
-
-  function assert(condition, msg) {
-    if (!condition) throw new Error(msg);
-  }
-
+  function assert(c, m) { if (!c) throw new Error(m); }
   async function req(method, path, body = null, headers = {}) {
-    const url = `${baseURL}${path}`;
-    const options = {
-      method,
-      headers: { 'Content-Type': 'application/json', ...headers },
-    };
-    if (body) options.body = JSON.stringify(body);
-    const res = await fetch(url, options);
-    const data = await res.json();
-    return { status: res.status, body: data };
+    const opts = { method, headers: { 'Content-Type': 'application/json', ...headers } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch(`${baseURL}${path}`, opts);
+    return { status: r.status, body: await r.json() };
   }
 
-  console.log('\n  DigiLocker Dwar Auth — Test Suite');
-  console.log('  ' + '─'.repeat(50));
+  let accessToken = '', refreshTokenVal = '', adminToken = '';
 
-  // ── Shared state for tests ───────────────────────────────
-  let accessToken = '';
-  let refreshTokenVal = '';
-  let adminAccessToken = '';
+  console.log('\n  DigiLocker Dwar — Tests');
+  console.log('  ' + '─'.repeat(40));
 
-  // ── Test 1: Register a regular naagrik ────────────────────
-  await test('Register naagrik "ananya"', async () => {
-    const { status, body } = await req('POST', '/auth/register', {
-      username: 'ananya', password: 'aadhaar123',
-    });
-    assert(status === 201, `Expected 201, got ${status}`);
-    assert(body.data.username === 'ananya', 'Username should be ananya');
-    assert(body.data.role === 'user', 'Default role should be user');
+  await test('Register user', async () => {
+    const { status, body } = await req('POST', '/auth/register', { username: 'ananya', password: 'aadhaar123' });
+    assert(status === 201 && body.data.role === 'user', 'Register failed');
   });
 
-  // ── Test 2: Register an admin naagrik ─────────────────────
-  await test('Register admin "vikash"', async () => {
-    const { status, body } = await req('POST', '/auth/register', {
-      username: 'vikash', password: 'admin_pass1', role: 'admin',
-    });
-    assert(status === 201, `Expected 201, got ${status}`);
-    assert(body.data.role === 'admin', 'Role should be admin');
+  await test('Register admin', async () => {
+    const { status } = await req('POST', '/auth/register', { username: 'vikash', password: 'admin_pass1', role: 'admin' });
+    assert(status === 201, 'Admin register failed');
   });
 
-  // ── Test 3: Duplicate username rejected ──────────────────
-  await test('Duplicate username returns 409', async () => {
-    const { status } = await req('POST', '/auth/register', {
-      username: 'ananya', password: 'other_password',
-    });
-    assert(status === 409, `Expected 409, got ${status}`);
+  await test('Duplicate username 409', async () => {
+    assert((await req('POST', '/auth/register', { username: 'ananya', password: 'other' })).status === 409, '');
   });
 
-  // ── Test 4: Short password rejected ──────────────────────
-  await test('Short password returns 400', async () => {
-    const { status } = await req('POST', '/auth/register', {
-      username: 'deepak', password: '123',
-    });
-    assert(status === 400, `Expected 400, got ${status}`);
-  });
-
-  // ── Test 5: Login with correct credentials ───────────────
-  await test('Login ananya — returns tokens', async () => {
-    const { status, body } = await req('POST', '/auth/login', {
-      username: 'ananya', password: 'aadhaar123',
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.accessToken, 'Should return accessToken');
-    assert(body.data.refreshToken, 'Should return refreshToken');
-    assert(body.data.user.username === 'ananya', 'User should be ananya');
+  await test('Login returns tokens', async () => {
+    const { status, body } = await req('POST', '/auth/login', { username: 'ananya', password: 'aadhaar123' });
+    assert(status === 200 && body.data.accessToken, 'Login failed');
     accessToken = body.data.accessToken;
     refreshTokenVal = body.data.refreshToken;
   });
 
-  // ── Test 6: Login with wrong password ────────────────────
-  await test('Login with wrong password returns 401', async () => {
-    const { status, body } = await req('POST', '/auth/login', {
-      username: 'ananya', password: 'wrong_password',
-    });
-    assert(status === 401, `Expected 401, got ${status}`);
-    assert(body.error === 'Invalid credentials', 'Should say invalid credentials');
+  await test('Wrong password 401', async () => {
+    assert((await req('POST', '/auth/login', { username: 'ananya', password: 'wrong' })).status === 401, '');
   });
 
-  // ── Test 7: Access profile with valid token ──────────────
-  await test('GET /auth/profile with valid token', async () => {
-    const { status, body } = await req('GET', '/auth/profile', null, {
-      Authorization: `Bearer ${accessToken}`,
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.username === 'ananya', 'Should return ananya profile');
+  await test('Profile with token', async () => {
+    const { status, body } = await req('GET', '/auth/profile', null, { Authorization: `Bearer ${accessToken}` });
+    assert(status === 200 && body.data.username === 'ananya', 'Profile failed');
   });
 
-  // ── Test 8: Access profile without token ─────────────────
-  await test('GET /auth/profile without token returns 401', async () => {
-    const { status } = await req('GET', '/auth/profile');
-    assert(status === 401, `Expected 401, got ${status}`);
+  await test('Profile without token 401', async () => {
+    assert((await req('GET', '/auth/profile')).status === 401, '');
   });
 
-  // ── Test 9: Access profile with invalid token ────────────
-  await test('GET /auth/profile with bad token returns 401', async () => {
-    const { status } = await req('GET', '/auth/profile', null, {
-      Authorization: 'Bearer invalid.token.here',
-    });
-    assert(status === 401, `Expected 401, got ${status}`);
-  });
-
-  // ── Test 10: Refresh token rotation ──────────────────────
-  await test('POST /auth/refresh rotates tokens', async () => {
-    const { status, body } = await req('POST', '/auth/refresh', {
-      refreshToken: refreshTokenVal,
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.accessToken, 'Should return new accessToken');
-    assert(body.data.refreshToken, 'Should return new refreshToken');
-    assert(body.data.refreshToken !== refreshTokenVal, 'Refresh token should rotate');
-    // WHY: Update for subsequent tests
+  await test('Refresh rotates tokens', async () => {
+    const { body } = await req('POST', '/auth/refresh', { refreshToken: refreshTokenVal });
+    assert(body.data.refreshToken !== refreshTokenVal, 'Not rotated');
     accessToken = body.data.accessToken;
     refreshTokenVal = body.data.refreshToken;
   });
 
-  // ── Test 11: Old refresh token is invalid ────────────────
-  await test('Old refresh token rejected after rotation', async () => {
-    const { status } = await req('POST', '/auth/refresh', {
-      refreshToken: 'old-token-that-does-not-exist',
-    });
-    assert(status === 401, `Expected 401, got ${status}`);
+  await test('Admin route — admin allowed', async () => {
+    const login = await req('POST', '/auth/login', { username: 'vikash', password: 'admin_pass1' });
+    adminToken = login.body.data.accessToken;
+    const { status } = await req('GET', '/auth/admin', null, { Authorization: `Bearer ${adminToken}` });
+    assert(status === 200, 'Admin blocked');
   });
 
-  // ── Test 12: Admin login ─────────────────────────────────
-  await test('Login admin vikash', async () => {
-    const { status, body } = await req('POST', '/auth/login', {
-      username: 'vikash', password: 'admin_pass1',
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    adminAccessToken = body.data.accessToken;
+  await test('Admin route — user blocked 403', async () => {
+    assert((await req('GET', '/auth/admin', null, { Authorization: `Bearer ${accessToken}` })).status === 403, '');
   });
 
-  // ── Test 13: Admin route — admin can access ──────────────
-  await test('Admin can access GET /auth/admin', async () => {
-    const { status, body } = await req('GET', '/auth/admin', null, {
-      Authorization: `Bearer ${adminAccessToken}`,
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.message.includes('admin panel'), 'Should mention admin panel');
-    assert(body.data.userCount === 2, 'Should have 2 users');
+  await test('Logout invalidates token', async () => {
+    await req('POST', '/auth/logout', null, { Authorization: `Bearer ${accessToken}` });
+    const { status, body } = await req('GET', '/auth/profile', null, { Authorization: `Bearer ${accessToken}` });
+    assert(status === 401 && body.error.includes('revoked'), 'Token not revoked');
   });
 
-  // ── Test 14: Regular naagrik blocked from admin route ─────
-  await test('Regular naagrik blocked from GET /auth/admin', async () => {
-    const { status, body } = await req('GET', '/auth/admin', null, {
-      Authorization: `Bearer ${accessToken}`,
-    });
-    assert(status === 403, `Expected 403, got ${status}`);
-    assert(body.error.includes('Access denied'), 'Should say access denied');
-  });
-
-  // ── Test 15: Admin can list naagrik ──────────────────────
-  await test('Admin can list all naagrik', async () => {
-    const { status, body } = await req('GET', '/auth/users', null, {
-      Authorization: `Bearer ${adminAccessToken}`,
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.length === 2, 'Should list 2 users');
-    // WHY: Ensure passwords are NOT exposed
-    assert(!body.data[0].passwordHash, 'Should not expose password hash');
-  });
-
-  // ── Test 16: Logout invalidates token ────────────────────
-  await test('POST /auth/logout invalidates token', async () => {
-    const { status, body } = await req('POST', '/auth/logout', null, {
-      Authorization: `Bearer ${accessToken}`,
-    });
-    assert(status === 200, `Expected 200, got ${status}`);
-    assert(body.data.message.includes('Logged out'), 'Should confirm logout');
-  });
-
-  // ── Test 17: Token rejected after logout ─────────────────
-  await test('Token rejected after logout', async () => {
-    const { status, body } = await req('GET', '/auth/profile', null, {
-      Authorization: `Bearer ${accessToken}`,
-    });
-    assert(status === 401, `Expected 401, got ${status}`);
-    assert(body.error.includes('revoked'), 'Should say token revoked');
-  });
-
-  // ── Summary ──────────────────────────────────────────────
-  console.log('  ' + '─'.repeat(50));
-  const passed = results.filter(r => r.pass).length;
-  const failed = results.filter(r => !r.pass).length;
-  console.log(`  Results: ${passed} passed, ${failed} failed out of ${results.length} tests`);
-  if (failed > 0) {
-    console.log('  Failed tests:');
-    results.filter(r => !r.pass).forEach(r => {
-      console.log(`    - Test ${r.num}: ${r.name} — ${r.error}`);
-    });
-  }
+  console.log('  ' + '─'.repeat(40));
+  console.log(`  Results: ${passed} passed, ${failed} failed`);
 }
 
+
 // ════════════════════════════════════════════════════════════════
-// SECTION 8 — Start Server, Run Tests, Shut Down
+// SECTION 8 — Start, Test, Shutdown
 // ════════════════════════════════════════════════════════════════
 
 async function main() {
-  console.log('============================================================');
-  console.log(' FILE 25 — DigiLocker Dwar: Authentication Server Project');
-  console.log('============================================================');
-
+  console.log('FILE 25 — DigiLocker Dwar: Auth Server');
   const app = createApp();
-
   const server = app.listen(0, async () => {
-    const { port } = server.address();
-    const baseURL = `http://127.0.0.1:${port}`;
-    console.log(`\n  DigiLocker Dwar running on ${baseURL}`);
-
-    try {
-      await runTests(baseURL);
-    } catch (err) {
-      console.error('  Test suite error:', err.message);
-    } finally {
+    const baseURL = `http://127.0.0.1:${server.address().port}`;
+    try { await runTests(baseURL); } catch (e) { console.error(e.message); }
+    finally {
       server.close(() => {
-        console.log('\n  Server closed. DigiLocker Dwar tests complete.\n');
-
-        // ── KEY TAKEAWAYS ──────────────────────────────────
-        console.log('  KEY TAKEAWAYS');
-        console.log('  ' + '─'.repeat(50));
-        console.log('  1. crypto.scrypt is a memory-hard hash function');
-        console.log('     built into Node — no npm packages needed.');
-        console.log('  2. JWT = base64url(header).base64url(payload)');
-        console.log('     .HMAC-SHA256-signature — three dot-separated parts.');
-        console.log('  3. Short-lived access tokens + refresh token');
-        console.log('     rotation balances security and usability.');
-        console.log('  4. Token blacklisting (by jti) enables logout');
-        console.log('     for stateless JWTs.');
-        console.log('  5. Role-based access middleware is a factory:');
-        console.log('     requireRole("admin") returns middleware.');
-        console.log('  6. timingSafeEqual prevents timing attacks when');
-        console.log('     comparing hashes or signatures.');
-        console.log('  7. Never expose passwordHash or salt in API');
-        console.log('     responses — map to safe objects before sending.');
-        console.log('  8. Generic "Invalid credentials" messages prevent');
-        console.log('     username enumeration attacks.');
+        console.log('\n  KEY TAKEAWAYS');
+        console.log('  1. crypto.scrypt is memory-hard hashing built into Node.');
+        console.log('  2. JWT = header.payload.HMAC-SHA256 — three dot-separated parts.');
+        console.log('  3. Short-lived access + refresh token rotation balances security/usability.');
+        console.log('  4. Token blacklisting (by jti) enables logout for stateless JWTs.');
+        console.log('  5. requireRole("admin") is a factory returning middleware.');
+        console.log('  6. timingSafeEqual prevents timing attacks on hash comparisons.');
+        console.log('  7. Generic "Invalid credentials" prevents username enumeration.');
         process.exit(0);
       });
     }

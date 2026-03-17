@@ -5,175 +5,84 @@
  *          API gateway, BFF pattern
  *
  *  WHY THIS MATTERS:
- *  How you serialize data determines bandwidth usage, parsing
- *  speed, and cross-language compatibility. How you structure
- *  API access (gateway, BFF, batching) determines developer
- *  productivity and system maintainability. PhonePe processes
- *  billions of UPI transactions — every byte and millisecond
- *  in serialization matters at that scale.
+ *  Serialization format determines bandwidth and parsing speed.
+ *  API access patterns (gateway, BFF, batching) determine
+ *  developer productivity. At PhonePe's scale (10B+ UPI
+ *  transactions/month), every byte matters.
  *  ============================================================ */
 
 // STORY: PhonePe UPI Payments
-// When you pay your chai-wallah via PhonePe, a JSON request leaves
-// your phone — human-readable, like a handwritten receipt. But between
-// NPCI (National Payments Corporation of India) and banks, data flies
-// as compact binary (like Protobuf) — because when you process 10
-// billion transactions a month, every saved byte means terabytes saved.
-// The API gateway at PhonePe is like NPCI itself — a central switch
-// routing your payment to the right bank, handling auth, rate-limiting,
-// and logging, so individual bank APIs stay simple.
+// A JSON request leaves your phone for chai payment -- readable
+// like a handwritten receipt. Between NPCI and banks, data flies
+// as compact binary (Protobuf) -- saving terabytes monthly. The
+// API gateway is like NPCI itself: a central switch routing
+// payments, handling auth, rate-limiting, and logging.
 
 console.log("=".repeat(70));
 console.log("  FILE 04: SERIALIZATION AND API PATTERNS");
 console.log("=".repeat(70));
 console.log();
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 1 — JSON Serialization and Deserialization
-// ════════════════════════════════════════════════════════════════
+// ================================================================
+// SECTION 1 — JSON Serialization
+// ================================================================
 
-// WHY: JSON is the lingua franca of web APIs. Every REST API
-// speaks JSON. Understanding serialization nuances (date handling,
-// BigInt issues, circular references) prevents production bugs.
+// WHY: JSON is the lingua franca of web APIs. Understanding
+// edge cases (dates, BigInt, undefined) prevents production bugs.
 
-console.log("--- SECTION 1: JSON Serialization/Deserialization ---\n");
+console.log("--- SECTION 1: JSON Serialization ---\n");
 
-class JSONDemo {
-  static basicSerialization() {
-    const upiTransaction = {
-      transactionId: "TXN202401150001",
-      from: { vpa: "arjun@phonepe", name: "Arjun Kumar", bank: "ICICI" },
-      to: { vpa: "chaiwala@paytm", name: "Raju Tea Stall", bank: "SBI" },
-      amount: 30,
-      currency: "INR",
-      timestamp: new Date().toISOString(),
-      status: "SUCCESS",
-      metadata: { location: "Koramangala, Bangalore", device: "Android" },
-    };
+const upiTransaction = {
+  transactionId: "TXN202401150001",
+  from: { vpa: "arjun@phonepe", bank: "ICICI" },
+  to: { vpa: "chaiwala@paytm", bank: "SBI" },
+  amount: 30, currency: "INR", status: "SUCCESS",
+};
 
-    const jsonString = JSON.stringify(upiTransaction);
-    const jsonPretty = JSON.stringify(upiTransaction, null, 2);
+const jsonString = JSON.stringify(upiTransaction);
+console.log(`  JSON size: ${jsonString.length} bytes`);
+console.log(`  Compact: ${jsonString.substring(0, 80)}...\n`);
 
-    console.log("  UPI Transaction Object -> JSON String:");
-    console.log(`  Compact (${jsonString.length} bytes):`);
-    console.log(`    ${jsonString.substring(0, 100)}...`);
-    console.log(`\n  Pretty-printed:`);
-    jsonPretty.split("\n").forEach((line) => console.log(`    ${line}`));
-
-    // Deserialization
-    const parsed = JSON.parse(jsonString);
-    console.log(`\n  Deserialized back:`);
-    console.log(`    from: ${parsed.from.vpa} -> to: ${parsed.to.vpa}`);
-    console.log(`    amount: Rs ${parsed.amount}`);
-    console.log(`    JSON size: ${jsonString.length} bytes`);
-    return jsonString.length;
-  }
-
-  static edgeCases() {
-    console.log("\n  JSON Edge Cases:");
-
-    // Undefined is dropped
-    const obj1 = { a: 1, b: undefined, c: null };
-    console.log(`    {a:1, b:undefined, c:null} -> ${JSON.stringify(obj1)}`);
-    console.log("    Note: 'undefined' is silently dropped, 'null' is preserved");
-
-    // Date becomes string
-    const obj2 = { created: new Date("2024-01-15") };
-    const parsed = JSON.parse(JSON.stringify(obj2));
-    console.log(`    Date object -> "${parsed.created}" (string, not Date!)`);
-    console.log("    Always use new Date(parsed.created) after parsing");
-
-    // BigInt fails
-    try {
-      JSON.stringify({ amount: BigInt(999999999999) });
-    } catch (e) {
-      console.log(`    BigInt -> TypeError: ${e.message}`);
-      console.log("    Solution: Convert to string before serializing");
-    }
-
-    // Custom serializer with replacer
-    const withBigInt = { amount: "999999999999", type: "bigint-as-string" };
-    console.log(`    Workaround: ${JSON.stringify(withBigInt)}`);
-
-    // toJSON method
-    class Transaction {
-      constructor(id, amount) {
-        this.id = id;
-        this.amount = amount;
-        this.internalSecret = "should-not-leak";
-      }
-      toJSON() {
-        return { id: this.id, amount: this.amount };
-      }
-    }
-    const txn = new Transaction("TXN001", 500);
-    console.log(`    toJSON() method: ${JSON.stringify(txn)}`);
-    console.log("    toJSON() controls what gets serialized (hides secrets)");
-  }
-}
-
-const jsonSize = JSONDemo.basicSerialization();
-JSONDemo.edgeCases();
+console.log("  JSON Edge Cases:");
+console.log(`    {a:1, b:undefined, c:null} -> ${JSON.stringify({ a: 1, b: undefined, c: null })}`);
+console.log("    undefined is dropped, null is preserved");
+const dateObj = { created: new Date("2024-01-15") };
+console.log(`    Date -> "${JSON.parse(JSON.stringify(dateObj)).created}" (string, not Date!)`);
+try { JSON.stringify({ amount: BigInt(999999999999) }); }
+catch (e) { console.log(`    BigInt -> TypeError (convert to string first)`); }
 console.log();
 
-// ════════════════════════════════════════════════════════════════
+// ================================================================
 // SECTION 2 — Protobuf-Style Binary Encoding
-// ════════════════════════════════════════════════════════════════
+// ================================================================
 
-// WHY: Protobuf encodes data in binary, using field numbers instead
-// of field names. This saves 30-80% space over JSON. At PhonePe's
-// scale (10B+ transactions/month), this saves petabytes.
+// WHY: Protobuf uses field numbers instead of names, saving 30-80%
+// over JSON. At PhonePe scale, this saves petabytes.
 
-console.log("--- SECTION 2: Protobuf-Style Binary Encoding ---\n");
+console.log("--- SECTION 2: Protobuf Binary Encoding ---\n");
 
 class SimpleBinaryEncoder {
-  constructor() {
-    this.buffer = [];
-  }
-
-  // Simplified varint encoding (like Protobuf)
+  constructor() { this.buffer = []; }
   encodeVarint(value) {
     const bytes = [];
-    while (value > 127) {
-      bytes.push((value & 0x7f) | 0x80);
-      value = value >>> 7;
-    }
-    bytes.push(value & 0x7f);
-    return bytes;
+    while (value > 127) { bytes.push((value & 0x7f) | 0x80); value = value >>> 7; }
+    bytes.push(value & 0x7f); return bytes;
   }
-
   encodeString(fieldNumber, value) {
-    // Wire type 2 (length-delimited) for strings
     const tag = (fieldNumber << 3) | 2;
     const encoded = Buffer.from(value, "utf-8");
-    this.buffer.push(...this.encodeVarint(tag));
-    this.buffer.push(...this.encodeVarint(encoded.length));
-    this.buffer.push(...encoded);
+    this.buffer.push(...this.encodeVarint(tag), ...this.encodeVarint(encoded.length), ...encoded);
   }
-
   encodeInt(fieldNumber, value) {
-    // Wire type 0 (varint) for integers
-    const tag = (fieldNumber << 3) | 0;
-    this.buffer.push(...this.encodeVarint(tag));
-    this.buffer.push(...this.encodeVarint(value));
+    this.buffer.push(...this.encodeVarint((fieldNumber << 3) | 0), ...this.encodeVarint(value));
   }
-
-  getBuffer() {
-    return Buffer.from(this.buffer);
-  }
-
-  getSize() {
-    return this.buffer.length;
-  }
+  getSize() { return this.buffer.length; }
 }
 
-console.log("  Protobuf Schema (conceptual):");
+console.log("  Protobuf schema:");
 console.log("    message UPITransaction {");
-console.log("      string transaction_id = 1;");
-console.log("      string from_vpa = 2;");
-console.log("      string to_vpa = 3;");
-console.log("      int32 amount = 4;");
-console.log("      string status = 5;");
+console.log("      string transaction_id = 1; string from_vpa = 2;");
+console.log("      string to_vpa = 3; int32 amount = 4; string status = 5;");
 console.log("    }\n");
 
 const encoder = new SimpleBinaryEncoder();
@@ -184,351 +93,163 @@ encoder.encodeInt(4, 30);
 encoder.encodeString(5, "SUCCESS");
 
 const binarySize = encoder.getSize();
-const binaryHex = encoder.getBuffer().toString("hex");
+console.log(`  Binary: ${binarySize} bytes vs JSON: ${jsonString.length} bytes`);
+console.log(`  Savings: ${((1 - binarySize / jsonString.length) * 100).toFixed(1)}% smaller`);
+console.log("  No field names, varint encoding, no quotes/commas/braces\n");
 
-console.log(`  Binary encoded: ${binaryHex}`);
-console.log(`  Binary size: ${binarySize} bytes`);
-console.log(`  JSON size:   ${jsonSize} bytes (from Section 1)`);
-console.log(`  Savings:     ${((1 - binarySize / jsonSize) * 100).toFixed(1)}% smaller`);
+// Scale calculation
+const daily = 300000000;
+const jsonGB = (daily * jsonString.length) / (1024 ** 3);
+const binGB = (daily * binarySize) / (1024 ** 3);
+console.log(`  At 300M daily transactions: JSON ~${jsonGB.toFixed(1)} GB, Binary ~${binGB.toFixed(1)} GB`);
+console.log(`  Savings: ~${(jsonGB - binGB).toFixed(1)} GB/day`);
 console.log();
 
-console.log("  Why Protobuf is faster:");
-console.log("    - No field name strings (uses 1-byte field numbers)");
-console.log("    - Varint encoding for integers (small numbers = fewer bytes)");
-console.log("    - No quotes, colons, commas, braces");
-console.log("    - Schema-defined: both sides know the structure");
+// ================================================================
+// SECTION 3 — GraphQL Concepts
+// ================================================================
+
+// WHY: GraphQL lets the client ask for exactly the data it needs,
+// solving REST's over-fetching and under-fetching problems.
+
+console.log("--- SECTION 3: GraphQL ---\n");
+
+console.log("  Over-fetching: REST GET /users/1 returns ALL fields");
+console.log("    Mobile only needs name+vpa. GraphQL: query { user(id:1) { name, vpa } }");
+console.log(`    Response: ${JSON.stringify({ name: "Arjun", vpa: "arjun@phonepe" })}\n`);
+
+console.log("  Under-fetching (N+1): REST needs 4 calls (user + 3 transactions)");
+console.log("    GraphQL: 1 query { user(id:1) { name, transactions { amount, to } } }");
+console.log("    1 round trip instead of 4!");
 console.log();
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 3 — Size and Speed Comparison
-// ════════════════════════════════════════════════════════════════
+// ================================================================
+// SECTION 4 — Request Batching
+// ================================================================
 
-// WHY: Choosing between JSON and binary formats is a real
-// engineering decision. This section quantifies the difference.
+// WHY: Multiple small calls create overhead. Batching combines
+// them into one request, critical for mobile on slow networks.
 
-console.log("--- SECTION 3: Size/Speed Comparison ---\n");
+console.log("--- SECTION 4: Request Batching ---\n");
 
-function benchmarkSerialization(iterations) {
-  const transaction = {
-    transactionId: "TXN202401150001",
-    fromVpa: "arjun@phonepe",
-    toVpa: "chaiwala@paytm",
-    amount: 30,
-    status: "SUCCESS",
-  };
-
-  // JSON benchmark
-  const jsonStart = Date.now();
-  let jsonSizeTotal = 0;
-  for (let i = 0; i < iterations; i++) {
-    const str = JSON.stringify(transaction);
-    JSON.parse(str);
-    jsonSizeTotal += str.length;
-  }
-  const jsonTime = Date.now() - jsonStart;
-
-  // Simple binary benchmark
-  const binStart = Date.now();
-  let binSizeTotal = 0;
-  for (let i = 0; i < iterations; i++) {
-    const enc = new SimpleBinaryEncoder();
-    enc.encodeString(1, transaction.transactionId);
-    enc.encodeString(2, transaction.fromVpa);
-    enc.encodeString(3, transaction.toVpa);
-    enc.encodeInt(4, transaction.amount);
-    enc.encodeString(5, transaction.status);
-    binSizeTotal += enc.getSize();
-  }
-  const binTime = Date.now() - binStart;
-
-  console.log(`  Benchmark: ${iterations.toLocaleString()} serialization+deserialization cycles`);
-  console.log();
-  console.log(`  ${"Format".padEnd(15)} ${"Time (ms)".padEnd(15)} ${"Total Size".padEnd(18)} ${"Per Message".padEnd(15)}`);
-  console.log(`  ${"─".repeat(15)} ${"─".repeat(15)} ${"─".repeat(18)} ${"─".repeat(15)}`);
-  console.log(`  ${"JSON".padEnd(15)} ${String(jsonTime + "ms").padEnd(15)} ${jsonSizeTotal.toLocaleString().padEnd(18)} ${(jsonSizeTotal / iterations).toFixed(0)} bytes`);
-  console.log(`  ${"Binary".padEnd(15)} ${String(binTime + "ms").padEnd(15)} ${binSizeTotal.toLocaleString().padEnd(18)} ${(binSizeTotal / iterations).toFixed(0)} bytes`);
-  console.log();
-
-  // Scale calculation
-  const dailyTransactions = 300000000; // 300M daily UPI transactions
-  const jsonDaily = (dailyTransactions * (jsonSizeTotal / iterations)) / (1024 * 1024 * 1024);
-  const binDaily = (dailyTransactions * (binSizeTotal / iterations)) / (1024 * 1024 * 1024);
-  console.log(`  At PhonePe scale (300M daily transactions):`);
-  console.log(`    JSON bandwidth: ~${jsonDaily.toFixed(1)} GB/day`);
-  console.log(`    Binary bandwidth: ~${binDaily.toFixed(1)} GB/day`);
-  console.log(`    Savings: ~${(jsonDaily - binDaily).toFixed(1)} GB/day`);
-}
-
-benchmarkSerialization(10000);
-console.log();
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 4 — GraphQL Concepts
-// ════════════════════════════════════════════════════════════════
-
-// WHY: GraphQL lets the client ask for exactly the data it needs —
-// no more, no less. It solves REST's over-fetching and
-// under-fetching problems, especially for mobile apps with
-// limited bandwidth.
-
-console.log("--- SECTION 4: GraphQL Concepts ---\n");
-
-const fullUser = { id: 1, name: "Arjun", vpa: "arjun@phonepe", balance: 15000, transactions: [101, 102, 103] };
-
-console.log("  Problem 1: REST Over-fetching");
-console.log(`    REST GET /api/users/1 returns: ${JSON.stringify(fullUser)}`);
-console.log("    Mobile only needs name + vpa. Wasted: balance, transactions");
-console.log("    GraphQL: query { user(id:1) { name, vpa } }");
-console.log(`    Response: ${JSON.stringify({ name: "Arjun", vpa: "arjun@phonepe" })} (zero waste)\n`);
-
-console.log("  Problem 2: REST Under-fetching (N+1)");
-console.log("    REST needs 4 calls: GET /users/1, GET /txn/101, /102, /103");
-console.log("    GraphQL: single query { user(id:1) { name, transactions { amount, to } } }");
-const gqlResult = { name: "Arjun", transactions: [
-  { amount: 30, to: "chaiwala@paytm" }, { amount: 500, to: "flipkart@upi" }, { amount: 2000, to: "rent@upi" }
-]};
-console.log(`    Response: ${JSON.stringify(gqlResult)}`);
-console.log("    1 round trip instead of 4!\n");
-
-// ════════════════════════════════════════════════════════════════
-// SECTION 5 — Request Batching
-// ════════════════════════════════════════════════════════════════
-
-// WHY: Multiple small API calls create overhead (TCP connection,
-// headers, latency per request). Batching combines them into a
-// single request, reducing round trips — critical for mobile
-// apps on slow networks.
-
-console.log("--- SECTION 5: Request Batching ---\n");
-
-const endpoints = ["/api/user/balance", "/api/user/recent-txns", "/api/offers", "/api/bills/pending", "/api/rewards"];
-
-console.log("  Without batching: 5 separate HTTP calls (~100ms each):");
+const endpoints = ["/api/user/balance", "/api/user/recent-txns", "/api/offers", "/api/bills/pending"];
+console.log("  Without batching: 4 separate calls (~100ms each = ~400ms)\n");
 endpoints.forEach((e, i) => console.log(`    ${i + 1}. GET ${e}`));
-console.log("    Total: ~500ms sequential, ~150ms parallel (5 connections)\n");
+console.log("\n  With batching: POST /api/batch (single call ~120ms)");
+console.log("  Fewer TCP/TLS handshakes, reduced headers, mobile-friendly\n");
 
-console.log("  With batching: POST /api/batch (single HTTP call):");
-console.log(`    Body: ${JSON.stringify({ batch: endpoints.map(p => ({ method: "GET", path: p })) })}`);
-console.log("    Total: ~120ms (server parallelizes internally)");
-console.log("    Benefits: fewer TCP/TLS handshakes, reduced headers, mobile-friendly\n");
+// ================================================================
+// SECTION 5 — API Gateway Pattern
+// ================================================================
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 6 — API Gateway Pattern
-// ════════════════════════════════════════════════════════════════
+// WHY: Single entry point handling auth, rate-limiting, routing,
+// and logging so microservices stay focused on business logic.
 
-// WHY: An API gateway is the single entry point for all clients.
-// It handles cross-cutting concerns (auth, rate-limiting, logging)
-// so microservices stay focused on business logic. PhonePe's
-// gateway is like NPCI — the central switch for all UPI traffic.
-
-console.log("--- SECTION 6: API Gateway Pattern ---\n");
+console.log("--- SECTION 5: API Gateway ---\n");
 
 class APIGateway {
-  constructor(name) {
-    this.name = name;
-    this.services = new Map();
-    this.rateLimits = new Map();
-    this.requestCount = 0;
-  }
+  constructor() { this.services = new Map(); this.rateLimits = new Map(); this.reqCount = 0; }
+  register(path, service) { this.services.set(path, service); }
+  setRateLimit(clientId, max) { this.rateLimits.set(clientId, { max, current: 0 }); }
 
-  registerService(path, service) {
-    this.services.set(path, service);
-  }
+  handle(clientId, method, path, headers, body) {
+    this.reqCount++;
+    console.log(`  [GW] ${method} ${path}`);
 
-  setRateLimit(clientId, maxRequests) {
-    this.rateLimits.set(clientId, { max: maxRequests, current: 0 });
-  }
+    if (!headers?.Authorization) { console.log(`    [AUTH] 401 Unauthorized`); return; }
+    console.log(`    [AUTH] Token verified`);
 
-  handleRequest(clientId, method, path, headers, body) {
-    this.requestCount++;
-    const reqId = `REQ-${this.requestCount}`;
-    console.log(`  [${this.name}] ${reqId}: ${method} ${path}`);
-
-    // Step 1: Authentication
-    if (!headers || !headers.Authorization) {
-      console.log(`    [AUTH] 401 Unauthorized — missing token`);
-      return { status: 401, error: "Missing authorization" };
-    }
-    console.log(`    [AUTH] Token verified for ${clientId}`);
-
-    // Step 2: Rate limiting
     const limit = this.rateLimits.get(clientId);
     if (limit) {
       limit.current++;
-      if (limit.current > limit.max) {
-        console.log(`    [RATE] 429 Too Many Requests (${limit.current}/${limit.max})`);
-        return { status: 429, error: "Rate limit exceeded" };
-      }
-      console.log(`    [RATE] ${limit.current}/${limit.max} requests used`);
+      if (limit.current > limit.max) { console.log(`    [RATE] 429 (${limit.current}/${limit.max})`); return; }
+      console.log(`    [RATE] ${limit.current}/${limit.max}`);
     }
 
-    // Step 3: Route to service
-    const pathPrefix = "/" + path.split("/").filter(Boolean).slice(0, 2).join("/");
-    const service = this.services.get(pathPrefix);
-    if (!service) {
-      console.log(`    [ROUTE] 404 — no service for ${pathPrefix}`);
-      return { status: 404, error: "Service not found" };
-    }
+    const prefix = "/" + path.split("/").filter(Boolean).slice(0, 2).join("/");
+    const service = this.services.get(prefix);
+    if (!service) { console.log(`    [ROUTE] 404`); return; }
     console.log(`    [ROUTE] -> ${service.name}`);
 
-    // Step 4: Request transformation
-    console.log(`    [TRANSFORM] Added X-Request-ID: ${reqId}`);
-    console.log(`    [TRANSFORM] Added X-Client-IP: 192.168.1.${Math.floor(Math.random() * 255)}`);
-
-    // Step 5: Forward to service
     const response = service.handle(method, path, body);
-    console.log(`    [RESPONSE] ${response.status} (${JSON.stringify(response.data).substring(0, 60)}...)`);
-
-    // Step 6: Logging
-    console.log(`    [LOG] Logged: ${method} ${path} -> ${response.status} (${Date.now()})`);
-
-    return response;
+    console.log(`    [RESPONSE] ${response.status}`);
   }
 }
 
-// Create microservices
-const userService = {
-  name: "UserService",
-  handle: (method, path, body) => ({
-    status: 200,
-    data: { userId: 1, name: "Arjun", vpa: "arjun@phonepe", kycStatus: "verified" },
-  }),
-};
+const gateway = new APIGateway();
+gateway.register("/api/users", { name: "UserService", handle: () => ({ status: 200 }) });
+gateway.register("/api/payments", { name: "PaymentService", handle: () => ({ status: 201 }) });
+gateway.setRateLimit("app", 5);
 
-const paymentService = {
-  name: "PaymentService",
-  handle: (method, path, body) => ({
-    status: 201,
-    data: { txnId: "TXN" + Date.now(), amount: body?.amount || 0, status: "SUCCESS" },
-  }),
-};
-
-const offerService = {
-  name: "OfferService",
-  handle: (method, path, body) => ({
-    status: 200,
-    data: { offers: [{ code: "PHONEPE50", discount: "50% cashback up to Rs 50" }] },
-  }),
-};
-
-// Setup gateway
-const gateway = new APIGateway("PhonePe-Gateway");
-gateway.registerService("/api/users", userService);
-gateway.registerService("/api/payments", paymentService);
-gateway.registerService("/api/offers", offerService);
-gateway.setRateLimit("mobile-app", 5);
-
-console.log("  API Gateway processing requests:\n");
-gateway.handleRequest("mobile-app", "GET", "/api/users/1", { Authorization: "Bearer token123" });
+console.log("  Gateway processing:\n");
+gateway.handle("app", "GET", "/api/users/1", { Authorization: "Bearer tok" });
 console.log();
-gateway.handleRequest("mobile-app", "POST", "/api/payments/initiate", { Authorization: "Bearer token123" }, { amount: 30, to: "chaiwala@paytm" });
+gateway.handle("app", "POST", "/api/payments/init", { Authorization: "Bearer tok" }, { amount: 30 });
 console.log();
-gateway.handleRequest("mobile-app", "GET", "/api/offers", { Authorization: "Bearer token123" });
+gateway.handle("anon", "GET", "/api/users/1", {});
 console.log();
 
-// Missing auth
-gateway.handleRequest("anonymous", "GET", "/api/users/1", {});
-console.log();
+// ================================================================
+// SECTION 6 — BFF (Backend for Frontend)
+// ================================================================
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 7 — BFF (Backend for Frontend) Pattern
-// ════════════════════════════════════════════════════════════════
+// WHY: Mobile needs compact data; web needs rich data. BFF creates
+// specialized backends for each frontend.
 
-// WHY: Different clients (mobile, web, TV) need different data
-// shapes and amounts. A mobile app needs compact data; a web
-// dashboard needs rich data. BFF creates specialized backends
-// for each frontend.
-
-console.log("--- SECTION 7: BFF (Backend for Frontend) ---\n");
-
-const txns = [
-  { id: 101, amount: 30, to: "Chai" }, { id: 102, amount: 500, to: "Flipkart" },
-  { id: 103, amount: 2000, to: "Rent" }, { id: 104, amount: 150, to: "Zomato" },
-];
+console.log("--- SECTION 6: BFF Pattern ---\n");
 
 const mobileResp = {
-  greeting: "Hi Arjun",
-  balance: "Rs 15,000",
-  recentTransactions: txns.slice(0, 3).map(t => ({ amount: `Rs ${t.amount}`, to: t.to })),
-  topOffer: "50% cashback up to Rs 50",
+  greeting: "Hi Arjun", balance: "Rs 15,000",
+  recentTxns: [{ amount: "Rs 30", to: "Chai" }, { amount: "Rs 500", to: "Flipkart" }],
 };
-
 const webResp = {
   user: { id: 1, name: "Arjun", email: "arjun@email.com", vpa: "arjun@phonepe" },
-  balance: { amount: 15000, currency: "INR", formatted: "Rs 15,000" },
-  transactions: txns,
-  offers: [{ code: "PHONEPE50", text: "50% cashback" }, { code: "NEWUSER", text: "Rs 100 cashback" }],
-  analytics: { totalSpent: txns.reduce((s, t) => s + t.amount, 0), count: txns.length },
-  quickActions: ["Send Money", "Pay Bills", "Recharge", "Bank Transfer"],
+  balance: { amount: 15000, currency: "INR" },
+  transactions: [{ id: 101, amount: 30, to: "Chai" }, { id: 102, amount: 500, to: "Flipkart" }],
+  analytics: { totalSpent: 530, count: 2 },
 };
 
-console.log("  Mobile BFF (compact):");
-console.log(`    ${JSON.stringify(mobileResp)}`);
-console.log(`    Size: ${JSON.stringify(mobileResp).length} bytes\n`);
-console.log("  Web BFF (rich, dashboard-ready):");
-console.log(`    ${JSON.stringify(webResp)}`);
-console.log(`    Size: ${JSON.stringify(webResp).length} bytes`);
-console.log(`\n  Mobile saves ${((1 - JSON.stringify(mobileResp).length / JSON.stringify(webResp).length) * 100).toFixed(0)}% bandwidth. Each frontend gets exactly what it needs.`);
-console.log();
+console.log(`  Mobile BFF: ${JSON.stringify(mobileResp).length} bytes (compact)`);
+console.log(`  Web BFF:    ${JSON.stringify(webResp).length} bytes (rich)`);
+console.log(`  Mobile saves ${((1 - JSON.stringify(mobileResp).length / JSON.stringify(webResp).length) * 100).toFixed(0)}% bandwidth.\n`);
 
-// ════════════════════════════════════════════════════════════════
-// SECTION 8 — Choosing the Right Serialization Format
-// ════════════════════════════════════════════════════════════════
+// ================================================================
+// SECTION 7 — Choosing Serialization Format
+// ================================================================
 
-// WHY: There is no one-size-fits-all. JSON for external APIs,
-// Protobuf for internal services, MessagePack for a middle ground.
-// This decision matrix helps choose.
-
-console.log("--- SECTION 8: Choosing Serialization Format ---\n");
+console.log("--- SECTION 7: Serialization Decision Matrix ---\n");
 
 const formats = [
-  { name: "JSON",     readable: "Yes", size: "Large",  speed: "Moderate", schema: "No",  use: "Mobile app <-> Gateway" },
-  { name: "Protobuf", readable: "No",  size: "Small",  speed: "Fast",     schema: "Yes", use: "PhonePe <-> NPCI" },
-  { name: "MsgPack",  readable: "No",  size: "Medium", speed: "Fast",     schema: "No",  use: "Redis cache values" },
-  { name: "Avro",     readable: "No",  size: "Small",  speed: "Fast",     schema: "Yes", use: "Kafka event streams" },
-  { name: "XML",      readable: "Yes", size: "Huge",   speed: "Slow",     schema: "No",  use: "Legacy bank NEFT/RTGS" },
+  ["JSON",     "Yes", "Large",  "Moderate", "Mobile <-> Gateway"],
+  ["Protobuf", "No",  "Small",  "Fast",     "PhonePe <-> NPCI"],
+  ["MsgPack",  "No",  "Medium", "Fast",     "Redis cache values"],
+  ["Avro",     "No",  "Small",  "Fast",     "Kafka event streams"],
 ];
-console.log(`  ${"Format".padEnd(12)} ${"Readable".padEnd(10)} ${"Size".padEnd(9)} ${"Speed".padEnd(10)} ${"Schema".padEnd(8)} PhonePe Use`);
-console.log(`  ${"─".repeat(12)} ${"─".repeat(10)} ${"─".repeat(9)} ${"─".repeat(10)} ${"─".repeat(8)} ${"─".repeat(22)}`);
-formats.forEach(f => {
-  console.log(`  ${f.name.padEnd(12)} ${f.readable.padEnd(10)} ${f.size.padEnd(9)} ${f.speed.padEnd(10)} ${f.schema.padEnd(8)} ${f.use}`);
+console.log(`  ${"Format".padEnd(10)} ${"Readable".padEnd(10)} ${"Size".padEnd(8)} ${"Speed".padEnd(10)} Use Case`);
+console.log(`  ${"---".repeat(18)}`);
+formats.forEach(([f, r, s, sp, u]) => {
+  console.log(`  ${f.padEnd(10)} ${r.padEnd(10)} ${s.padEnd(8)} ${sp.padEnd(10)} ${u}`);
 });
-console.log("\n  Decision: Readable? JSON | Smallest+fastest? Protobuf | No schema binary? MsgPack | Kafka? Avro | Legacy? XML");
 console.log();
 
-// ════════════════════════════════════════════════════════════════
+// ================================================================
 // KEY TAKEAWAYS
-// ════════════════════════════════════════════════════════════════
+// ================================================================
 console.log("=".repeat(70));
 console.log("  KEY TAKEAWAYS");
 console.log("=".repeat(70));
 console.log();
-console.log("  1. JSON is human-readable and universal but verbose. Watch out");
-console.log("     for edge cases: undefined is dropped, Dates become strings,");
-console.log("     BigInt throws errors.");
+console.log("  1. JSON is universal but verbose. Watch for undefined/Date/BigInt.");
 console.log();
-console.log("  2. Protobuf (binary) is 30-80% smaller than JSON and faster to");
-console.log("     parse — critical at PhonePe's scale of billions of transactions.");
+console.log("  2. Protobuf is 30-80% smaller -- critical at billions of TXNs.");
 console.log();
-console.log("  3. GraphQL solves over-fetching (getting too much data) and");
-console.log("     under-fetching (N+1 calls) by letting the client specify");
-console.log("     exactly what fields it needs.");
+console.log("  3. GraphQL solves over-fetching and N+1 under-fetching.");
 console.log();
-console.log("  4. Request batching combines multiple API calls into one HTTP");
-console.log("     request, reducing network overhead — especially on mobile.");
+console.log("  4. Request batching reduces round trips -- big win on mobile.");
 console.log();
-console.log("  5. API Gateway is the single entry point that handles auth,");
-console.log("     rate limiting, routing, and logging — so microservices stay");
-console.log("     focused on business logic.");
+console.log("  5. API Gateway handles auth, rate limiting, routing centrally.");
 console.log();
-console.log("  6. BFF (Backend for Frontend) creates tailored API layers for");
-console.log("     each client type — mobile gets compact data, web gets rich data.");
+console.log("  6. BFF tailors API responses per client type.");
 console.log();
-console.log("  7. Choose serialization by context: JSON for external APIs,");
-console.log("     Protobuf for internal services, Avro for event streams.");
-console.log();
-console.log('  "In the UPI ecosystem, every byte saved per transaction saves');
-console.log('   petabytes at scale. Serialization is not a detail — it is');
-console.log('   an architectural decision."');
-console.log('                                          — The PhonePe Architect');
+console.log("  7. Choose by context: JSON external, Protobuf internal, Avro Kafka.");
 console.log();

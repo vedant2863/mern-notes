@@ -1,257 +1,153 @@
 /**
- * ============================================================
- *  FILE 26 : Monad & Functor Patterns
- *  Topic   : Functor, Monad, Maybe, Either/Result
- *  WHY THIS MATTERS:
- *    Functors and monads give us chainable containers that
- *    handle nulls, errors, and side-effects in a composable
- *    way — replacing scattered null checks and try/catch
- *    blocks with elegant pipelines.
- * ============================================================
+ * FILE 26 : Monad & Functor Patterns
+ * Topic   : Functor, Maybe, Either/Result
+ * Used in : Optional chaining (?.) is Maybe, Promise is a monad, error handling
  */
 
-// STORY: Mumbai's Dabbawala system packs values in steel tiffin
-// containers (dabbas) that chain safely through the rail network —
-// Functor = dabba with `.map()`, Maybe = dabba might be empty,
-// Either = delivery succeeded or address wrong.
+// STORY: Mumbai's Dabbawala packs values in tiffin containers (dabbas).
+// Functor = dabba with .map(), Maybe = dabba might be empty,
+// Either = delivery succeeded or address was wrong.
 
 // ────────────────────────────────────────────────────────────
-// BLOCK 1 — Functor: The Mappable Container
+//  BLOCK 1 : Functor (a container you can .map() over)
 // ────────────────────────────────────────────────────────────
 console.log("=== BLOCK 1: Functor ===");
 
-// WHY: A Functor is any container that implements `map` —
-// it lets you transform the value inside without unwrapping it.
+// Array is the most common functor: [1,2,3].map(x => x * 2)
+// A functor is just anything with a .map() that returns a new container
 
-// Array is the most familiar functor
-const prices = [40, 60, 80];
-const doubled = prices.map(x => x * 2);
-console.log("Dabbawala maps over prices:", doubled);
-// Output: Dabbawala maps over prices: [ 80, 120, 160 ]
-
-// WHY: A custom Dabba functor wraps any single value.
 class Dabba {
-  constructor(value) { this._value = value; }
+  constructor(value) {
+    this.value = value;
+  }
 
-  // The functor contract: map applies fn and re-wraps
-  map(fn) { return new Dabba(fn(this._value)); }
-
-  // Utility to inspect
-  inspect() { return `Dabba(${JSON.stringify(this._value)})`; }
-}
-
-const result = new Dabba(50)
-  .map(x => x + 10)
-  .map(x => x * 2)
-  .map(x => `₹${x}`);
-
-console.log("Dabbawala chains Dabba maps:", result.inspect());
-// Output: Dabbawala chains Dabba maps: Dabba("₹120")
-
-// WHY: Functor laws guarantee predictable composition.
-// Law 1 — Identity: dabba.map(x => x) equals dabba
-const idDabba = new Dabba(75).map(x => x);
-console.log("Identity law:", idDabba.inspect());
-// Output: Identity law: Dabba(75)
-
-// Law 2 — Composition: map(f).map(g) equals map(x => g(f(x)))
-const f = x => x + 5;
-const g = x => x * 3;
-const composed = new Dabba(10).map(x => g(f(x)));
-const chained = new Dabba(10).map(f).map(g);
-console.log("Composition law — composed:", composed.inspect(), "chained:", chained.inspect());
-// Output: Composition law — composed: Dabba(45) chained: Dabba(45)
-
-// ────────────────────────────────────────────────────────────
-// BLOCK 2 — MaybeDabba Monad: Null-Safe Chaining
-// ────────────────────────────────────────────────────────────
-console.log("\n=== BLOCK 2: MaybeDabba Monad ===");
-
-// WHY: MaybeDabba eliminates null checks by short-circuiting
-// the chain when the value is null or undefined (no lunch today).
-
-class MaybeDabba {
-  constructor(value) { this._value = value; }
-
-  static of(value) { return new MaybeDabba(value); }
-
-  get isNothing() { return this._value === null || this._value === undefined; }
-
-  // Functor: map
   map(fn) {
-    return this.isNothing ? this : MaybeDabba.of(fn(this._value));
-  }
-
-  // Monad: flatMap (avoids MaybeDabba(MaybeDabba(x)) nesting)
-  flatMap(fn) {
-    return this.isNothing ? this : fn(this._value);
-  }
-
-  getOrElse(fallback) {
-    return this.isNothing ? fallback : this._value;
+    return new Dabba(fn(this.value));
   }
 
   inspect() {
-    return this.isNothing ? "EmptyDabba" : `TiffinDabba(${JSON.stringify(this._value)})`;
+    return "Dabba(" + JSON.stringify(this.value) + ")";
   }
 }
 
-// Dabbawala looks up nested delivery data safely
+const result = new Dabba(50)
+  .map(function (x) { return x + 10; })
+  .map(function (x) { return x * 2; })
+  .map(function (x) { return "Rs " + x; });
+
+console.log("Chained maps:", result.inspect());
+// Dabba("Rs 120")
+
+// ────────────────────────────────────────────────────────────
+//  BLOCK 2 : Maybe Monad (null-safe chaining)
+// ────────────────────────────────────────────────────────────
+console.log("\n=== BLOCK 2: Maybe Monad ===");
+
+// Maybe skips the chain when value is null/undefined (empty dabba = no lunch)
+// JavaScript's ?. (optional chaining) does the same thing!
+
+class Maybe {
+  constructor(value) {
+    this.value = value;
+  }
+
+  static of(value) {
+    return new Maybe(value);
+  }
+
+  get isEmpty() {
+    return this.value === null || this.value === undefined;
+  }
+
+  map(fn) {
+    if (this.isEmpty) return this;
+    return Maybe.of(fn(this.value));
+  }
+
+  flatMap(fn) {
+    if (this.isEmpty) return this;
+    return fn(this.value);
+  }
+
+  getOrElse(fallback) {
+    if (this.isEmpty) return fallback;
+    return this.value;
+  }
+}
+
 const deliveries = {
   ramesh: { address: { area: "Nariman Point" } },
   suresh: { address: null },
-  priya: null
+  priya: null,
 };
 
 function getArea(name) {
-  return MaybeDabba.of(deliveries[name])
-    .flatMap(u => MaybeDabba.of(u.address))
-    .map(addr => addr.area)
+  return Maybe.of(deliveries[name])
+    .flatMap(function (user) { return Maybe.of(user.address); })
+    .map(function (addr) { return addr.area; })
     .getOrElse("Unknown");
 }
 
-console.log("Ramesh's area:", getArea("ramesh"));
-// Output: Ramesh's area: Nariman Point
-console.log("Suresh's area:", getArea("suresh"));
-// Output: Suresh's area: Unknown
-console.log("Priya's area:", getArea("priya"));
-// Output: Priya's area: Unknown
-console.log("Nobody's area:", getArea("nobody"));
-// Output: Nobody's area: Unknown
+console.log("Ramesh:", getArea("ramesh")); // Nariman Point
+console.log("Suresh:", getArea("suresh")); // Unknown
+console.log("Nobody:", getArea("nobody")); // Unknown
 
-// WHY: JavaScript's ?. is essentially a built-in MaybeDabba
-const rameshArea = deliveries["ramesh"]?.address?.area ?? "Unknown";
-const sureshArea = deliveries["suresh"]?.address?.area ?? "Unknown";
-console.log("Optional chaining — Ramesh:", rameshArea, "Suresh:", sureshArea);
-// Output: Optional chaining — Ramesh: Nariman Point Suresh: Unknown
-
-// flatMap prevents nesting
-const nested = MaybeDabba.of(50).flatMap(x => MaybeDabba.of(x * 10));
-console.log("flatMap avoids nesting:", nested.inspect());
-// Output: flatMap avoids nesting: TiffinDabba(500)
+// Same thing with optional chaining (built-in Maybe!):
+// deliveries["ramesh"]?.address?.area ?? "Unknown"
 
 // ────────────────────────────────────────────────────────────
-// BLOCK 3 — DeliveryResult Monad: Railway-Oriented Programming
+//  BLOCK 3 : Either/Result Monad (success or failure as values)
 // ────────────────────────────────────────────────────────────
-console.log("\n=== BLOCK 3: DeliveryResult Monad ===");
+console.log("\n=== BLOCK 3: Either/Result Monad ===");
 
-// WHY: DeliveryResult handles errors as values — the "happy path"
-// stays in Delivered (Right), failures ride in WrongAddress (Left).
+// Instead of try/catch, encode success and failure as values
+// Success keeps going. Failure short-circuits the chain.
 
-class WrongAddress {
-  constructor(value) { this._value = value; }
-  map() { return this; }             // skip transforms
-  flatMap() { return this; }         // skip transforms
-  fold(leftFn, _rightFn) { return leftFn(this._value); }
-  inspect() { return `WrongAddress(${JSON.stringify(this._value)})`; }
+class Failure {
+  constructor(error) { this.error = error; }
+  map() { return this; }
+  flatMap() { return this; }
+  fold(onError, onSuccess) { return onError(this.error); }
 }
 
-class Delivered {
-  constructor(value) { this._value = value; }
-  map(fn) { return new Delivered(fn(this._value)); }
-  flatMap(fn) { return fn(this._value); }
-  fold(_leftFn, rightFn) { return rightFn(this._value); }
-  inspect() { return `Delivered(${JSON.stringify(this._value)})`; }
+class Success {
+  constructor(value) { this.value = value; }
+  map(fn) { return new Success(fn(this.value)); }
+  flatMap(fn) { return fn(this.value); }
+  fold(onError, onSuccess) { return onSuccess(this.value); }
 }
 
-function tryCatch(fn) {
-  try { return new Delivered(fn()); }
-  catch (e) { return new WrongAddress(e.message); }
-}
-
-// Dabbawala builds a delivery validation pipeline
-function parsePincode(input) {
-  return tryCatch(() => {
-    const n = Number(input);
-    if (Number.isNaN(n)) throw new Error("Not a number");
-    return n;
-  });
+function safeParse(input) {
+  const n = Number(input);
+  if (isNaN(n)) return new Failure("Not a number");
+  return new Success(n);
 }
 
 function validatePincode(pin) {
-  return pin >= 100000 && pin <= 999999
-    ? new Delivered(pin)
-    : new WrongAddress(`Pincode ${pin} out of range`);
+  if (pin >= 100000 && pin <= 999999) {
+    return new Success(pin);
+  }
+  return new Failure("Pincode " + pin + " out of range");
 }
 
-function formatDelivery(pin) {
-  return `Deliver to pincode ${pin}`;
+function deliver(input) {
+  return safeParse(input)
+    .flatMap(validatePincode)
+    .map(function (pin) { return "Deliver to pincode " + pin; })
+    .fold(
+      function (err) { return "FAILED: " + err; },
+      function (val) { return "SUCCESS: " + val; }
+    );
 }
 
-// Railway: happy path
-const happy = parsePincode("400001")
-  .flatMap(validatePincode)
-  .map(formatDelivery)
-  .fold(
-    err => `FAILED: ${err}`,
-    val => `SUCCESS: ${val}`
-  );
-console.log("Happy path:", happy);
-// Output: Happy path: SUCCESS: Deliver to pincode 400001
-
-// Railway: parse failure
-const parseFail = parsePincode("abc")
-  .flatMap(validatePincode)
-  .map(formatDelivery)
-  .fold(
-    err => `FAILED: ${err}`,
-    val => `SUCCESS: ${val}`
-  );
-console.log("Parse failure:", parseFail);
-// Output: Parse failure: FAILED: Not a number
-
-// Railway: validation failure
-const valFail = parsePincode("999")
-  .flatMap(validatePincode)
-  .map(formatDelivery)
-  .fold(
-    err => `FAILED: ${err}`,
-    val => `SUCCESS: ${val}`
-  );
-console.log("Validation failure:", valFail);
-// Output: Validation failure: FAILED: Pincode 999 out of range
-
-function validateCustomerName(name) {
-  return name && name.length >= 2
-    ? new Delivered(name)
-    : new WrongAddress("Customer name too short");
-}
-
-function validateLunchItem(item) {
-  return item && ["roti", "sabzi", "dal", "rice", "biryani"].includes(item)
-    ? new Delivered(item)
-    : new WrongAddress("Invalid lunch item");
-}
-
-function validateOrder(name, item, pincode) {
-  return validateCustomerName(name).flatMap(n =>
-    validateLunchItem(item).flatMap(i =>
-      parsePincode(pincode).flatMap(validatePincode).map(p =>
-        ({ customer: n, lunchItem: i, pincode: p })
-      )
-    )
-  );
-}
-
-const goodOrder = validateOrder("Ramesh", "dal", "400001");
-console.log("Valid order:", goodOrder.fold(e => `ERR: ${e}`, u => `OK: ${JSON.stringify(u)}`));
-// Output: Valid order: OK: {"customer":"Ramesh","lunchItem":"dal","pincode":400001}
-
-const badOrder = validateOrder("R", "pizza", "400001");
-console.log("Bad order:", badOrder.fold(e => `ERR: ${e}`, u => `OK: ${JSON.stringify(u)}`));
-// Output: Bad order: ERR: Customer name too short
+console.log("Valid:", deliver("400001"));
+console.log("Bad input:", deliver("abc"));
+console.log("Bad range:", deliver("999"));
 
 // ────────────────────────────────────────────────────────────
-// KEY TAKEAWAYS
+//  KEY TAKEAWAYS
 // ────────────────────────────────────────────────────────────
-// 1. A Functor implements `map` — transforms values without
-//    unwrapping the dabba. Array is the canonical example.
-// 2. A Monad adds `flatMap`/`chain` — avoids nested wrapping
-//    when the transform itself returns a tiffin container.
-// 3. MaybeDabba handles null/undefined safely (empty dabba =
-//    no lunch today); JS `?.` is similar.
-// 4. DeliveryResult (WrongAddress/Delivered) encodes success/
-//    failure as values, enabling railway-oriented delivery
-//    validation without try/catch.
-// 5. `fold` collapses the dabba back to a plain value,
-//    forcing you to handle both cases explicitly.
+// 1. Functor = anything with .map(). Array is the most common one.
+// 2. Maybe handles null safely. JS optional chaining (?.) is the same idea.
+// 3. Either/Result encodes success/failure as values instead of try/catch.
+// 4. Promise is also a monad: .then() is flatMap, it chains and short-circuits on error.

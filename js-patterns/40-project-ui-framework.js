@@ -1,306 +1,202 @@
 /**
  * ============================================================
- *  FILE 40 : SwiggyDashboard — Capstone Reactive UI Framework
- *  Topic   : Composite, Observer, Proxy, State, Decorator,
- *            Template Method
- *  WHY THIS MATTERS:
- *  Modern UI frameworks combine many design patterns under the
- *  hood. SwiggyDashboard builds a minimal reactive system from
- *  scratch — a component tree (Composite), Proxy-based live order
- *  tracking, lifecycle hooks via Template Method, a centralized
- *  state store, and decorators for cross-cutting concerns.
+ *  FILE 40 : Swiggy Dashboard (Mini Project)
+ *  Patterns used: Composite, Observer, State, Decorator
+ *  WHERE YOU SEE THIS: React component tree, Vue reactivity,
+ *    any UI framework with state management
  * ============================================================
  */
-// STORY: The Swiggy Dashboard system constructs a live restaurant
-// dashboard where every component (OrderList, OrderCard) knows its
-// children, reacts to order status changes through Proxy-based tracking,
-// follows an order lifecycle (Template Method), and draws power from
-// the centralized order state store.
+
+// STORY: The Swiggy Dashboard tracks live restaurant orders. Components
+// form a tree, react to state changes automatically, and decorators
+// add logging without touching original code.
 
 // ────────────────────────────────────────────────────────────
-//  SECTION 1 — Reactive State (Proxy + Observer)
+// BLOCK 1 — Simple Reactive State
 // ────────────────────────────────────────────────────────────
-// WHY: Proxy intercepts property mutation. Combined with an observer
-//      list, any state change auto-notifies subscribers.
+// When state changes, all subscribers get notified automatically.
+
 class ReactiveState {
-  constructor(initial = {}) {
-    this._subscribers = new Set();
-    this._batching = false; this._pendingNotify = false;
-    this._state = new Proxy(initial, {
-      set: (target, prop, value) => {
-        const old = target[prop]; target[prop] = value;
-        if (old !== value) {
-          if (this._batching) { this._pendingNotify = true; }
-          else { this._notify(prop, value, old); }
-        }
-        return true;
-      },
-      get: (target, prop) => target[prop],
-    });
+  constructor(initial) {
+    this.data = initial;
+    this.subscribers = [];
   }
-  get state() { return this._state; }
-  subscribe(fn) { this._subscribers.add(fn); return () => this._subscribers.delete(fn); }
-  // WHY: Batching groups multiple mutations into one notification.
-  batch(fn) {
-    this._batching = true; this._pendingNotify = false;
-    fn(this._state); this._batching = false;
-    if (this._pendingNotify) this._notify("batch", null, null);
+
+  get(key) { return this.data[key]; }
+
+  set(key, value) {
+    var old = this.data[key];
+    this.data[key] = value;
+    if (old !== value) {
+      this._notify(key, value, old);
+    }
   }
-  _notify(prop, value, old) {
-    for (const fn of this._subscribers) fn({ prop, value, old });
+
+  subscribe(fn) {
+    this.subscribers.push(fn);
+  }
+
+  _notify(key, value, old) {
+    for (var i = 0; i < this.subscribers.length; i++) {
+      this.subscribers[i]({ key: key, value: value, old: old });
+    }
   }
 }
 
 // ────────────────────────────────────────────────────────────
-//  SECTION 2 — Component Base Class (Composite + Template Method)
+// BLOCK 2 — Component Tree (Composite)
 // ────────────────────────────────────────────────────────────
-// WHY: Composite treats single and tree of components uniformly.
-//      Template Method defines the lifecycle skeleton.
+// mount() cascades to all children — just like React.
+
 class Component {
-  constructor(name, props = {}) {
-    this.name = name; this.props = props; this.children = [];
-    this.parent = null; this._mounted = false; this._renderCount = 0; this._output = "";
+  constructor(name, props) {
+    this.name = name;
+    this.props = props || {};
+    this.children = [];
+    this.mounted = false;
   }
-  addChild(child) { child.parent = this; this.children.push(child); return this; }
-  removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parent = null; return this; }
-  // WHY: mount() defines the fixed sequence. Subclasses override hooks, not the skeleton.
+
+  addChild(child) {
+    child.parent = this;
+    this.children.push(child);
+    return this;
+  }
+
   mount() {
-    this.onBeforeMount(); this._output = this.render(); this._mounted = true; this._renderCount++;
-    for (const child of this.children) child.mount();
-    this.onMounted(); return this;
+    this.mounted = true;
+    for (var i = 0; i < this.children.length; i++) {
+      this.children[i].mount();
+    }
+    return this;
   }
-  update(newProps = {}) {
-    Object.assign(this.props, newProps); this.onBeforeUpdate();
-    this._output = this.render(); this._renderCount++;
-    for (const child of this.children) child.update();
-    this.onUpdated(); return this;
+
+  update(newProps) {
+    var keys = Object.keys(newProps || {});
+    for (var i = 0; i < keys.length; i++) {
+      this.props[keys[i]] = newProps[keys[i]];
+    }
+    for (var j = 0; j < this.children.length; j++) {
+      this.children[j].update();
+    }
   }
-  unmount() {
-    for (const child of [...this.children]) child.unmount();
-    this.onUnmounted(); this._mounted = false; return this;
-  }
-  onBeforeMount() {} onMounted() {} onBeforeUpdate() {} onUpdated() {} onUnmounted() {}
-  render() { return `<${this.name}/>`; }
-  toTree(indent = 0) {
-    const pad = "  ".repeat(indent);
-    let result = `${pad}${this._output}`;
-    for (const child of this.children) result += "\n" + child.toTree(indent + 1);
+
+  render() { return "<" + this.name + "/>"; }
+
+  toTree(indent) {
+    indent = indent || 0;
+    var pad = "";
+    for (var p = 0; p < indent; p++) pad += "  ";
+
+    var result = pad + this.render();
+    for (var i = 0; i < this.children.length; i++) {
+      result += "\n" + this.children[i].toTree(indent + 1);
+    }
     return result;
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  SECTION 3 — Concrete Components (Swiggy Dashboard)
-// ────────────────────────────────────────────────────────────
-class RestaurantDashboard extends Component {
-  render() { return `<Dashboard restaurant="${this.props.restaurant || "SwiggyDashboard"}">`; }
-  onMounted() { this._log = ["RestaurantDashboard mounted"]; }
+class Dashboard extends Component {
+  render() { return "<Dashboard restaurant=\"" + this.props.restaurant + "\">"; }
 }
-class RestaurantHeader extends Component {
-  render() { return `<RestaurantHeader text="${this.props.text || ""}">`; }
+
+class Header extends Component {
+  render() { return "<Header text=\"" + (this.props.text || "") + "\">"; }
 }
+
 class OrderList extends Component {
-  render() { return `<OrderList count=${(this.props.orders || []).length}>`; }
+  render() {
+    var orders = this.props.orders || [];
+    return "<OrderList count=" + orders.length + ">";
+  }
 }
+
 class OrderCard extends Component {
-  render() { const status = this.props.status || "Placed"; return `<OrderCard [${status}] "${this.props.item}">`; }
-}
-class DeliveryTracker extends Component {
-  render() { return `<DeliveryTracker text="${this.props.text || ""}">`; }
+  render() {
+    return "<OrderCard [" + (this.props.status || "Placed") + "] \"" + this.props.item + "\">";
+  }
 }
 
 // ────────────────────────────────────────────────────────────
-//  SECTION 4 — Component Decorators
+// BLOCK 3 — Decorator (add logging without modifying source)
 // ────────────────────────────────────────────────────────────
-// WHY: Decorators add behavior (logging, memoization) without modifying source.
+
 function withLogging(component) {
-  const origMount = component.mount.bind(component);
-  const origUpdate = component.update.bind(component);
-  component._logs = [];
-  component.mount = (...args) => { component._logs.push(`[LOG] ${component.name} mounting`); return origMount(...args); };
-  component.update = (...args) => { component._logs.push(`[LOG] ${component.name} updating`); return origUpdate(...args); };
-  return component;
-}
-function withMemo(component) {
-  let lastPropsJson = null;
-  const origUpdate = component.update.bind(component);
-  component._skipped = 0;
-  component.update = (newProps = {}) => {
-    const nextJson = JSON.stringify({ ...component.props, ...newProps });
-    if (nextJson === lastPropsJson) { component._skipped++; return component; }
-    lastPropsJson = nextJson; return origUpdate(newProps);
+  component.logs = [];
+  var originalMount = component.mount.bind(component);
+  component.mount = function() {
+    component.logs.push("[LOG] " + component.name + " mounting");
+    return originalMount();
   };
   return component;
 }
 
 // ────────────────────────────────────────────────────────────
-//  SECTION 5 — Centralized State Store (Order State)
+// DEMO — All patterns working together
 // ────────────────────────────────────────────────────────────
-// WHY: A single store holds order state. Components subscribe
-//      and re-render automatically when state changes.
-class Store {
-  constructor(initial) { this._reactive = new ReactiveState(initial); this._connected = new Map(); }
-  get state() { return this._reactive.state; }
-  connect(component, mapStateFn) {
-    const unsub = this._reactive.subscribe(() => { component.update(mapStateFn(this._reactive.state)); });
-    this._connected.set(component.name, component);
-    Object.assign(component.props, mapStateFn(this._reactive.state));
-    return unsub;
+
+console.log("=== Swiggy Dashboard ===\n");
+
+// 1. Build component tree
+var app = new Dashboard("Dashboard", { restaurant: "Meghana's Biryani" });
+var header = new Header("Header", { text: "Welcome to Swiggy" });
+var orderList = new OrderList("OrderList", { orders: [] });
+
+app.addChild(withLogging(header));
+app.addChild(orderList);
+app.mount();
+
+console.log("--- Component Tree ---");
+console.log(app.toTree());
+
+// 2. Reactive store
+var store = new ReactiveState({
+  restaurant: "Meghana's Biryani",
+  orders: []
+});
+
+// When orders change, update the OrderList component
+store.subscribe(function(change) {
+  if (change.key === "orders") {
+    orderList.update({ orders: change.value });
   }
-  batch(fn) { this._reactive.batch(fn); }
-  dispatch(action, payload) {
-    if (action === "ADD_ORDER") {
-      const orders = this._reactive.state.orders || [];
-      orders.push({ item: payload.item, status: "Placed", price: payload.price });
-      this._reactive.state.orders = [...orders];
-    } else if (action === "UPDATE_STATUS") {
-      const orders = this._reactive.state.orders || [];
-      if (orders[payload.index]) { orders[payload.index].status = payload.status; this._reactive.state.orders = [...orders]; }
-    } else if (action === "SET_RESTAURANT") {
-      this._reactive.state.restaurant = payload.restaurant;
-    }
-  }
+});
+
+// 3. Add orders through the store
+var orders = [];
+orders.push({ item: "Hyderabadi Biryani", status: "Placed", price: 350 });
+orders.push({ item: "Masala Dosa", status: "Placed", price: 120 });
+store.set("orders", orders);
+
+console.log("\nOrders:", store.get("orders").length);
+
+// 4. Add OrderCards as children
+orderList.children = [];
+var currentOrders = store.get("orders");
+for (var i = 0; i < currentOrders.length; i++) {
+  var card = new OrderCard("OrderCard-" + i, {
+    item: currentOrders[i].item,
+    status: currentOrders[i].status
+  });
+  orderList.addChild(card);
+  card.mount();
 }
 
-// ════════════════════════════════════════════════════════════
-//  DEMO — All patterns working together
-// ════════════════════════════════════════════════════════════
-console.log("=== SwiggyDashboard: Capstone Reactive UI Framework ===\n");
-
-// --- 1. Build the component tree (Composite) ---
-console.log("--- Building Component Tree ---");
-const app = new RestaurantDashboard("Dashboard", { restaurant: "Meghana's Biryani" });
-const header = new RestaurantHeader("RestaurantHeader", { text: "Welcome to Swiggy Dashboard" });
-const orderList = new OrderList("OrderList", { orders: [] });
-const tracker = new DeliveryTracker("DeliveryTracker", { text: "Powered by Swiggy Delivery" });
-app.addChild(header); app.addChild(orderList); app.addChild(tracker);
-// WHY: Composite — mount() cascades to all children automatically.
-app.mount();
-console.log("Tree after mount:");
+console.log("\n--- Tree with Orders ---");
 console.log(app.toTree());
-// Output: <Dashboard restaurant="Meghana's Biryani">
-// Output:   <RestaurantHeader text="Welcome to Swiggy Dashboard">
-// Output:   <OrderList count=0>
-// Output:   <DeliveryTracker text="Powered by Swiggy Delivery">
-console.log("Dashboard mounted:", app._mounted);   // Output: Dashboard mounted: true
-console.log("Header mounted:", header._mounted);    // Output: Header mounted: true
 
-// --- 2. Decorators (Logging + Memoization) ---
-console.log("\n--- Decorators: Logging & Memoization ---");
-withLogging(header);
-withMemo(tracker);
-header.update({ text: "Updated Restaurant Header" });
-console.log("Header log:", header._logs.join(", ")); // Output: Header log: [LOG] RestaurantHeader updating
-// WHY: Memoized tracker skips re-render when props haven't changed.
-tracker.update({ text: "Powered by Swiggy Delivery" }); // same props — first call caches
-tracker.update({ text: "Powered by Swiggy Delivery" }); // same props — skipped
-console.log("Tracker skipped renders:", tracker._skipped); // Output: Tracker skipped renders: 1
-tracker.update({ text: "Ravi is on the way" }); // different props — re-renders
-console.log("Tracker render count:", tracker._renderCount); // Output: Tracker render count: 3
+// 5. Update status
+currentOrders[0].status = "Preparing";
+store.set("orders", currentOrders);
+console.log("Order 0 status:", store.get("orders")[0].status);
 
-// --- 3. Reactive state store ---
-console.log("\n--- Reactive State Store ---");
-const store = new Store({ restaurant: "Meghana's Biryani", orders: [] });
-const changeLog = [];
-store._reactive.subscribe((change) => { changeLog.push(change.prop); });
-
-// --- 4. Connect components to store ---
-store.connect(orderList, (state) => ({ orders: state.orders || [] }));
-store.connect(header, (state) => ({ text: state.restaurant || "" }));
-
-// --- 5. Dispatch actions ---
-console.log("\n--- Dispatching Actions ---");
-store.dispatch("ADD_ORDER", { item: "Hyderabadi Biryani", price: 350 });
-store.dispatch("ADD_ORDER", { item: "Masala Dosa", price: 120 });
-store.dispatch("ADD_ORDER", { item: "Filter Coffee", price: 60 });
-console.log("Orders after adds:", store.state.orders.length); // Output: Orders after adds: 3
-// WHY: OrderList auto-updated via store connection.
-console.log("OrderList render count:", orderList._renderCount); // Output: OrderList render count: 4
-
-// Add OrderCard children dynamically
-orderList.children = [];
-store.state.orders.forEach((o, i) => {
-  const card = new OrderCard(`OrderCard-${i}`, { item: o.item, status: o.status });
-  orderList.addChild(card); card.mount();
-});
-console.log("\nTree with order cards:");
-console.log(app.toTree());
-// Output: <Dashboard restaurant="Meghana's Biryani">
-// Output:   <RestaurantHeader text="Meghana's Biryani">
-// Output:   <OrderList count=3>
-// Output:     <OrderCard [Placed] "Hyderabadi Biryani">
-// Output:     <OrderCard [Placed] "Masala Dosa">
-// Output:     <OrderCard [Placed] "Filter Coffee">
-// Output:   <DeliveryTracker text="Ravi is on the way">
-
-// --- 6. Update order status ---
-console.log("\n--- Updating Order Status ---");
-store.dispatch("UPDATE_STATUS", { index: 0, status: "Preparing" });
-orderList.children = [];
-store.state.orders.forEach((o, i) => {
-  const card = new OrderCard(`OrderCard-${i}`, { item: o.item, status: o.status });
-  orderList.addChild(card); card.mount();
-});
-console.log("Order 0 status:", store.state.orders[0].status); // Output: Order 0 status: Preparing
-console.log("Order 1 status:", store.state.orders[1].status); // Output: Order 1 status: Placed
-console.log("\nTree after status update:");
-console.log(app.toTree());
-// Output: <Dashboard restaurant="Meghana's Biryani">
-// Output:   <RestaurantHeader text="Meghana's Biryani">
-// Output:   <OrderList count=3>
-// Output:     <OrderCard [Preparing] "Hyderabadi Biryani">
-// Output:     <OrderCard [Placed] "Masala Dosa">
-// Output:     <OrderCard [Placed] "Filter Coffee">
-// Output:   <DeliveryTracker text="Ravi is on the way">
-
-// --- 7. Batch updates ---
-console.log("\n--- Batch State Updates ---");
-const notifyCountBefore = changeLog.length;
-store.batch((state) => {
-  state.restaurant = "MTR - Mavalli Tiffin Rooms";
-  state.orders = [...state.orders, { item: "Rava Idli", status: "Placed", price: 90 }];
-});
-const batchNotifications = changeLog.length - notifyCountBefore;
-console.log("Notifications from batch:", batchNotifications); // Output: Notifications from batch: 1
-console.log("Total orders:", store.state.orders.length);       // Output: Total orders: 4
-
-// --- 8. Unmount lifecycle ---
-console.log("\n--- Unmount Lifecycle ---");
-const unmountLog = [];
-tracker.onUnmounted = function () { unmountLog.push(`${this.name} unmounted`); };
-app.removeChild(tracker); tracker.unmount();
-console.log("Unmount log:", unmountLog.join(", ")); // Output: Unmount log: DeliveryTracker unmounted
-console.log("Tracker mounted:", tracker._mounted);   // Output: Tracker mounted: false
-console.log("Dashboard children:", app.children.length); // Output: Dashboard children: 2
-
-// --- 9. Proxy reactivity proof ---
-console.log("\n--- Proxy Reactivity Proof ---");
-const miniStore = new ReactiveState({ activeOrders: 0 });
-const reactions = [];
-miniStore.subscribe((change) => { reactions.push(`${change.prop}: ${change.old} -> ${change.value}`); });
-miniStore.state.activeOrders = 1;
-miniStore.state.activeOrders = 2;
-miniStore.state.activeOrders = 2; // same value — no notification
-console.log("Reactions:", reactions.join(", ")); // Output: Reactions: activeOrders: 0 -> 1, activeOrders: 1 -> 2
-console.log("Reaction count:", reactions.length); // Output: Reaction count: 2
+// 6. Check decorator logs
+console.log("Header logs:", header.logs.join(", "));
 
 // ────────────────────────────────────────────────────────────
-//  KEY TAKEAWAYS
+// KEY TAKEAWAYS
 // ────────────────────────────────────────────────────────────
-// 1. Composite pattern lets you treat individual components and
-//    deep trees with the same mount/update/unmount API.
-// 2. Proxy-based reactivity intercepts mutations and auto-notifies
-//    subscribers — the same approach Vue 3 uses under the hood.
-// 3. Template Method defines the lifecycle skeleton; subclasses
-//    override hooks, not the flow.
-// 4. Decorators (withLogging, withMemo) add cross-cutting behavior
-//    without touching the component's own code.
-// 5. A centralized Store + connect() lets any component subscribe
-//    to only the state it needs.
-// 6. Batch updates group mutations into a single notification,
-//    preventing wasteful cascading re-renders.
-// 7. The SwiggyDashboard proves that the patterns behind React,
-//    Vue, and Svelte are composable building blocks — here tracking
-//    live orders from Meghana's Biryani to MTR in real time.
-console.log("\nSwiggyDashboard complete. Live orders are flowing!");
-// Output: SwiggyDashboard complete. Live orders are flowing!
+// 1. Composite treats single components and trees with the same API.
+// 2. Reactive state auto-notifies subscribers on change — like Vue.
+// 3. Decorators (withLogging) add behavior without touching source.
+// 4. Store + subscribe lets components react to relevant state.
+// 5. This is a simplified version of how React/Vue work internally.

@@ -1,226 +1,172 @@
 /**
  * ============================================================
  *  FILE 33 : Repository, Service Layer & Unit of Work
- *  Topic  : Repository Pattern, Service Layer, Unit of Work
- *  WHY THIS MATTERS:
- *    Mixing database calls with business logic creates
- *    untestable spaghetti. Repository abstracts storage,
- *    Service Layer encapsulates business rules, and
- *    Unit of Work batches changes into atomic commits.
+ *  WHERE YOU SEE THIS: Express/NestJS backends, any app that
+ *    separates database access from business logic
  * ============================================================
  */
 
-// STORY: Seth Govind ji runs a kirana store godown. He separates the
-// godown shelves (Repository) from business decisions (Service Layer)
-// like credit, pricing, and home delivery — and tracks every month-end
-// hisaab as a batch (Unit of Work).
+// STORY: Seth Govind ji runs a kirana store. He separates godown shelves
+// (Repository) from business decisions (Service Layer) like pricing
+// and stock checks.
 
 // ────────────────────────────────────────────────────────────
-// BLOCK 1 — Repository Pattern (Abstract Data Access)
+// BLOCK 1 — Repository Pattern
 // ────────────────────────────────────────────────────────────
+// Hides WHERE data lives. Consumers call findById — never know the storage.
 
-// WHY: A Repository hides WHERE data lives (memory, file, API).
-// Consumers call .findById() — they never know the storage engine.
-
-class GodownRepository {
-  constructor(name) {
-    this.name = name;
-    this.store = new Map();
+class GodownRepo {
+  constructor() {
+    this.store = {};
     this.nextId = 1;
   }
 
-  create(entity) {
-    const id = this.nextId++;
-    const record = { ...entity, id };
-    this.store.set(id, record);
-    return { ...record };
+  create(item) {
+    var id = this.nextId;
+    this.nextId++;
+    var record = { id: id, name: item.name, qty: item.qty, price: item.price };
+    this.store[id] = record;
+    return record;
   }
 
   findById(id) {
-    const r = this.store.get(id);
-    return r ? { ...r } : null;
+    return this.store[id] || null;
   }
 
-  findAll() { return [...this.store.values()]; }
+  findAll() {
+    var results = [];
+    var keys = Object.keys(this.store);
+    for (var i = 0; i < keys.length; i++) {
+      results.push(this.store[keys[i]]);
+    }
+    return results;
+  }
 
   update(id, changes) {
-    const existing = this.store.get(id);
+    var existing = this.store[id];
     if (!existing) return null;
-    const updated = { ...existing, ...changes, id };
-    this.store.set(id, updated);
-    return { ...updated };
+    var keys = Object.keys(changes);
+    for (var i = 0; i < keys.length; i++) {
+      existing[keys[i]] = changes[keys[i]];
+    }
+    return existing;
   }
 
-  delete(id) { return this.store.delete(id); }
+  remove(id) {
+    delete this.store[id];
+  }
 }
 
-// Seth Govind ji stocks the godown shelves
-console.log("=== Repository Pattern ==="); // Output: === Repository Pattern ===
-
-const kiranaRepo = new GodownRepository("kirana-items");
+console.log("=== Repository Pattern ===");
+var kiranaRepo = new GodownRepo();
 kiranaRepo.create({ name: "Atta 10kg", qty: 200, price: 450 });
 kiranaRepo.create({ name: "Toor Dal 1kg", qty: 50, price: 160 });
-kiranaRepo.create({ name: "Basmati Rice 5kg", qty: 500, price: 380 });
-
-console.log("Item #1:", kiranaRepo.findById(1).name); // Output: Item #1: Atta 10kg
-console.log("All count:", kiranaRepo.findAll().length); // Output: All count: 3
-
-// WHY: Swapping storage is one-line — nothing else changes
-kiranaRepo.update(2, { qty: 45 });
-console.log("Updated #2 qty:", kiranaRepo.findById(2).qty); // Output: Updated #2 qty: 45
-
-kiranaRepo.delete(3);
-console.log("After delete count:", kiranaRepo.findAll().length); // Output: After delete count: 2
+console.log("Item #1:", kiranaRepo.findById(1).name);
+console.log("All count:", kiranaRepo.findAll().length);
 
 // ────────────────────────────────────────────────────────────
 // BLOCK 2 — Service Layer (Business Logic)
 // ────────────────────────────────────────────────────────────
-
-// WHY: The Service Layer sits between controllers and repositories.
-// It enforces business rules so that no controller can bypass them.
+// Sits between controllers and repos. Enforces business rules.
 
 class KiranaService {
-  constructor(kiranaRepo, orderRepo) {
-    this.items = kiranaRepo;
+  constructor(itemRepo, orderRepo) {
+    this.items = itemRepo;
     this.orders = orderRepo;
   }
 
-  restock(itemId, amount) {
-    const p = this.items.findById(itemId);
-    if (!p) throw new Error("Item not found");
-    // WHY: Business rule — max stock 1000 per item in godown
-    const newQty = Math.min(p.qty + amount, 1000);
-    this.items.update(itemId, { qty: newQty });
-    return this.items.findById(itemId);
-  }
-
   placeOrder(itemId, qty) {
-    const p = this.items.findById(itemId);
-    if (!p) throw new Error("Item not found");
-    // WHY: Business rule — cannot sell more than stock (no udhaar on goods you don't have)
-    if (p.qty < qty) {
+    var product = this.items.findById(itemId);
+    if (!product) {
+      throw new Error("Item not found");
+    }
+
+    if (product.qty < qty) {
       return { success: false, reason: "Insufficient stock" };
     }
-    this.items.update(itemId, { qty: p.qty - qty });
-    const order = this.orders.create({
-      itemId,
-      qty,
-      total: (p.price * qty).toFixed(2),
-      status: "confirmed"
-    });
-    return { success: true, order };
-  }
 
-  getOrderSummary() {
-    return this.orders.findAll().map(o =>
-      `Order #${o.id}: ${o.qty} units, \u20B9${o.total} [${o.status}]`
-    );
+    this.items.update(itemId, { qty: product.qty - qty });
+
+    var total = product.price * qty;
+    var order = this.orders.create({
+      name: "Order for item " + itemId,
+      qty: qty,
+      price: total
+    });
+
+    return { success: true, order: order };
   }
 }
 
-console.log("\n=== Service Layer ==="); // Output: === Service Layer ===
+console.log("\n=== Service Layer ===");
+var orderRepo = new GodownRepo();
+var service = new KiranaService(kiranaRepo, orderRepo);
 
-const orderRepo = new GodownRepository("orders");
-const kiranaService = new KiranaService(kiranaRepo, orderRepo);
+var o1 = service.placeOrder(1, 50);
+console.log("Order success:", o1.success, "| Total:", o1.order.price);
 
-// Govind ji restocks and places orders through the service — never touching repos directly
-const restocked = kiranaService.restock(1, 100);
-console.log("Restocked Atta 10kg qty:", restocked.qty); // Output: Restocked Atta 10kg qty: 300
-
-const o1 = kiranaService.placeOrder(1, 50);
-console.log("Order success:", o1.success); // Output: Order success: true
-console.log("Order total: \u20B9" + o1.order.total); // Output: Order total: ₹22500.00
-
-const o2 = kiranaService.placeOrder(1, 999);
-console.log("Oversell blocked:", o2.reason); // Output: Oversell blocked: Insufficient stock
-
-const summary = kiranaService.getOrderSummary();
-console.log("Orders:", summary[0]); // Output: Orders: Order #1: 50 units, ₹22500.00 [confirmed]
+var o2 = service.placeOrder(1, 999);
+console.log("Oversell blocked:", o2.reason);
 
 // ────────────────────────────────────────────────────────────
-// BLOCK 3 — Unit of Work (Track Changes, Commit / Rollback)
+// BLOCK 3 — Unit of Work (Batch Changes)
 // ────────────────────────────────────────────────────────────
+// Collects all changes, commits them as one batch — or rolls back.
 
-// WHY: Unit of Work collects all changes during a business operation
-// and commits them as one atomic batch — or rolls everything back.
-// Seth Govind ji calls this the month-end hisaab (batch billing).
-
-class MonthEndHisaab {
+class UnitOfWork {
   constructor() {
     this.operations = [];
-    this.committed = false;
   }
 
-  registerCreate(repo, entity) {
-    this.operations.push({ type: "create", repo, entity });
+  addCreate(repo, item) {
+    this.operations.push({ type: "create", repo: repo, item: item });
   }
 
-  registerUpdate(repo, id, changes) {
-    this.operations.push({ type: "update", repo, id, changes });
-  }
-
-  registerDelete(repo, id) {
-    this.operations.push({ type: "delete", repo, id });
+  addUpdate(repo, id, changes) {
+    this.operations.push({ type: "update", repo: repo, id: id, changes: changes });
   }
 
   commit() {
-    // WHY: All-or-nothing — if any operation fails, we stop
-    const results = [];
-    try {
-      for (const op of this.operations) {
-        if (op.type === "create") results.push(op.repo.create(op.entity));
-        else if (op.type === "update") results.push(op.repo.update(op.id, op.changes));
-        else if (op.type === "delete") results.push(op.repo.delete(op.id));
+    for (var i = 0; i < this.operations.length; i++) {
+      var op = this.operations[i];
+      if (op.type === "create") {
+        op.repo.create(op.item);
+      } else if (op.type === "update") {
+        op.repo.update(op.id, op.changes);
       }
-      this.committed = true;
-      return { success: true, count: results.length };
-    } catch (err) {
-      return { success: false, error: err.message };
     }
+    var count = this.operations.length;
+    this.operations = [];
+    return { success: true, count: count };
   }
 
   rollback() {
-    // WHY: Discard all pending changes
-    const count = this.operations.length;
+    var count = this.operations.length;
     this.operations = [];
     return count;
   }
 }
 
-console.log("\n=== Unit of Work (Month-End Hisaab) ==="); // Output: === Unit of Work (Month-End Hisaab) ===
+console.log("\n=== Unit of Work ===");
+var godownRepo = new GodownRepo();
+var uow = new UnitOfWork();
 
-const godownRepo = new GodownRepository("godown");
+uow.addCreate(godownRepo, { name: "Mustard Oil", qty: 300, price: 185 });
+uow.addCreate(godownRepo, { name: "Sugar 1kg", qty: 250, price: 45 });
+console.log("Pending ops:", uow.operations.length);
 
-// Govind ji batches a big supply shipment as one atomic operation
-const uow = new MonthEndHisaab();
-uow.registerCreate(godownRepo, { name: "Mustard Oil 1L", qty: 300, price: 185 });
-uow.registerCreate(godownRepo, { name: "Sugar 1kg", qty: 250, price: 45 });
-uow.registerCreate(godownRepo, { name: "Chana Dal 1kg", qty: 100, price: 95 });
+var result = uow.commit();
+console.log("Committed:", result.success, "| ops:", result.count);
 
-console.log("Pending ops:", uow.operations.length); // Output: Pending ops: 3
-const commitResult = uow.commit();
-console.log("Commit result:", commitResult.success, "ops:", commitResult.count); // Output: Commit result: true ops: 3
-console.log("Godown items:", godownRepo.findAll().length); // Output: Godown items: 3
-
-// Rollback scenario
-const uow2 = new MonthEndHisaab();
-uow2.registerCreate(godownRepo, { name: "Phantom Item", qty: 0 });
-uow2.registerDelete(godownRepo, 1);
-const rolled = uow2.rollback();
-console.log("Rolled back ops:", rolled); // Output: Rolled back ops: 2
-console.log("Godown still has:", godownRepo.findAll().length, "items"); // Output: Godown still has: 3 items
-
-// Govind ji's summary
-console.log("\nGovind ji's godown is organized:"); // Output: Govind ji's godown is organized:
-console.log("- Repository hides storage details (godown shelves)"); // Output: - Repository hides storage details (godown shelves)
-console.log("- Service Layer enforces kirana business rules"); // Output: - Service Layer enforces kirana business rules
-console.log("- Month-end hisaab batches changes atomically"); // Output: - Month-end hisaab batches changes atomically
+var uow2 = new UnitOfWork();
+uow2.addCreate(godownRepo, { name: "Phantom Item", qty: 0, price: 0 });
+console.log("Rolled back:", uow2.rollback());
 
 // ────────────────────────────────────────────────────────────
 // KEY TAKEAWAYS
 // ────────────────────────────────────────────────────────────
-// 1. Repository (godown shelves) abstracts data access — swap in-memory for DB with no logic changes.
-// 2. Service Layer enforces kirana business rules (credit limit, stock check) between controllers and repositories.
-// 3. Unit of Work (month-end hisaab) collects mutations and commits/rolls back as one batch.
-// 4. Together they create clean separation: storage | logic | transactions.
+// 1. Repository abstracts data access — swap storage without changing logic.
+// 2. Service Layer enforces business rules between controllers and repos.
+// 3. Unit of Work batches mutations and commits or rolls back as one.
+// 4. Together: storage | logic | transactions — clean separation.
 // 5. Test services by injecting fake repos — no database needed.

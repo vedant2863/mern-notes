@@ -3,24 +3,19 @@
 // ============================================================
 //  Topic  : The error interface, errors.New, fmt.Errorf, error
 //           wrapping with %w, errors.Is, errors.As, custom
-//           error types, sentinel errors, errors.Join,
-//           practical validation patterns.
+//           error types, sentinel errors, errors.Join
 //
 //  WHY THIS MATTERS:
-//  Go rejects exceptions in favor of explicit error values.
-//  Every function that can fail returns an error, and callers
-//  must handle it. This makes error paths visible, testable,
-//  and impossible to accidentally ignore (the compiler helps).
-//  Mastering Go error patterns is non-negotiable.
+//  Go rejects exceptions for explicit error values. Every
+//  function that can fail returns an error. This makes error
+//  paths visible, testable, and impossible to accidentally
+//  ignore. Mastering Go error patterns is non-negotiable.
 // ============================================================
 
 // ============================================================
-// STORY: Railway Safety Inspector
-// Inspector Sharma checks every railway system for failures.
-// He walks the tracks, inspects signals, and examines coaches
-// — every anomaly is logged, classified, and either fixed or
-// escalated. His motto: "No defect goes unchecked, no failure
-// goes unrecorded."
+// STORY: Inspector Sharma checks every railway system. Every
+// anomaly is logged, classified, and either fixed or escalated.
+// "No defect unchecked, no failure unrecorded."
 // ============================================================
 
 package main
@@ -33,10 +28,8 @@ import (
 )
 
 // ────────────────────────────────────────────────────────────
-// Sentinel Errors (package-level, by convention)
+// Sentinel Errors
 // ────────────────────────────────────────────────────────────
-// WHY: Sentinel errors are package-level variables that callers
-// can compare against. Prefix with Err by convention.
 
 var (
 	ErrNotFound     = errors.New("not found")
@@ -49,8 +42,7 @@ var (
 // ────────────────────────────────────────────────────────────
 
 type ValidationError struct {
-	Field   string
-	Message string
+	Field, Message string
 }
 
 func (e *ValidationError) Error() string {
@@ -61,7 +53,7 @@ type InspectionError struct {
 	System  string
 	Code    int
 	Message string
-	Err     error // wrapped inner error
+	Err     error
 }
 
 func (e *InspectionError) Error() string {
@@ -71,82 +63,57 @@ func (e *InspectionError) Error() string {
 	return fmt.Sprintf("[%s] error %d: %s", e.System, e.Code, e.Message)
 }
 
-func (e *InspectionError) Unwrap() error {
-	return e.Err
-}
+func (e *InspectionError) Unwrap() error { return e.Err }
 
 func main() {
 
-	// ──────────────────────────────────────────────────────────────
-	// EXAMPLE BLOCK 1 — Basic Errors, errors.New, fmt.Errorf,
-	//                    The Value+Error Pattern
-	// ──────────────────────────────────────────────────────────────
+	// ============================================================
+	// EXAMPLE BLOCK 1 — Basic Errors & The Value+Error Pattern
+	// ============================================================
 
 	// ────────────────────────────────────────────────────────────
-	// 1.1 — The error Interface
+	// 1.1 — errors.New
 	// ────────────────────────────────────────────────────────────
-	// WHY: error is a built-in interface with one method:
-	//   type error interface { Error() string }
-	// Functions return (value, error) — the "comma error" pattern.
 
-	fmt.Println("--- The error Interface ---")
-	fmt.Println("type error interface { Error() string }")
-	fmt.Println("Convention: return (value, error) — nil error means success")
-
-	// ────────────────────────────────────────────────────────────
-	// 1.2 — errors.New: Simple Error Creation
-	// ────────────────────────────────────────────────────────────
-	// WHY: errors.New creates a basic error with a message.
-
-	fmt.Println("\n--- errors.New ---")
-	inspectTrackPressure := func(psi float64) (string, error) {
+	fmt.Println("--- errors.New ---")
+	inspect := func(psi float64) (string, error) {
 		if psi < 0 {
-			return "", errors.New("track pressure cannot be negative")
+			return "", errors.New("pressure cannot be negative")
 		}
 		if psi > 100 {
-			return "", errors.New("track pressure exceeds safe limit")
+			return "", errors.New("pressure exceeds safe limit")
 		}
-		return fmt.Sprintf("%.1f PSI — within safe range", psi), nil
+		return fmt.Sprintf("%.1f PSI — safe", psi), nil
 	}
 
-	result, err := inspectTrackPressure(75.0)
-	if err != nil {
+	if result, err := inspect(75.0); err != nil {
 		fmt.Println("ERROR:", err)
 	} else {
 		fmt.Println("OK:", result)
 	}
-	// Output: OK: 75.0 PSI — within safe range
 
-	_, err = inspectTrackPressure(150.0)
-	if err != nil {
+	if _, err := inspect(150.0); err != nil {
 		fmt.Println("ERROR:", err)
 	}
-	// Output: ERROR: track pressure exceeds safe limit
 
 	// ────────────────────────────────────────────────────────────
-	// 1.3 — fmt.Errorf: Formatted Error Messages
+	// 1.2 — fmt.Errorf
 	// ────────────────────────────────────────────────────────────
-	// WHY: fmt.Errorf lets you include dynamic values in errors.
 
 	fmt.Println("\n--- fmt.Errorf ---")
-	inspectSignalTemp := func(signalName string, temp float64) error {
+	checkTemp := func(name string, temp float64) error {
 		if temp > 200 {
-			return fmt.Errorf("signal %q overheating: %.1f°C exceeds 200°C limit", signalName, temp)
+			return fmt.Errorf("signal %q overheating: %.1f°C", name, temp)
 		}
 		return nil
 	}
-
-	err = inspectSignalTemp("Signal-Patna-Jn", 250.3)
-	if err != nil {
+	if err := checkTemp("Signal-Patna-Jn", 250.3); err != nil {
 		fmt.Println("ERROR:", err)
 	}
-	// Output: ERROR: signal "Signal-Patna-Jn" overheating: 250.3°C exceeds 200°C limit
 
 	// ────────────────────────────────────────────────────────────
-	// 1.4 — The Value+Error Pattern
+	// 1.3 — Value+Error Pattern
 	// ────────────────────────────────────────────────────────────
-	// WHY: This is Go's fundamental error handling pattern.
-	// Always check error FIRST, before using the value.
 
 	fmt.Println("\n--- Value+Error Pattern ---")
 	parseReading := func(input string) (float64, error) {
@@ -156,318 +123,160 @@ func main() {
 		}
 		return val, nil
 	}
-
-	readings := []string{"42.5", "not_a_number", "98.6"}
-	for _, r := range readings {
-		val, err := parseReading(r)
-		if err != nil {
+	for _, r := range []string{"42.5", "bad", "98.6"} {
+		if val, err := parseReading(r); err != nil {
 			fmt.Printf("  FAIL: %v\n", err)
 		} else {
 			fmt.Printf("  OK:   %.1f\n", val)
 		}
 	}
-	// Output:
-	//   OK:   42.5
-	//   FAIL: invalid reading "not_a_number": strconv.ParseFloat: parsing "not_a_number": invalid syntax
-	//   OK:   98.6
 
-	// ────────────────────────────────────────────────────────────
-	// 1.5 — Don't Ignore Errors!
-	// ────────────────────────────────────────────────────────────
-	// WHY: Ignoring errors with _ is a code smell. The only
-	// acceptable use is when you truly cannot handle the error.
-
-	fmt.Println("\n--- Don't Ignore Errors ---")
-	fmt.Println("BAD:  val, _ := strconv.Atoi(input)  // swallows error")
-	fmt.Println("GOOD: val, err := strconv.Atoi(input) // handle error")
-
-	// ──────────────────────────────────────────────────────────────
-	// EXAMPLE BLOCK 2 — Error Wrapping with %w, errors.Is(),
-	//                    errors.As(), Unwrapping Chains
-	// ──────────────────────────────────────────────────────────────
+	// ============================================================
+	// EXAMPLE BLOCK 2 — Wrapping, errors.Is, errors.As
+	// ============================================================
 
 	// ────────────────────────────────────────────────────────────
 	// 2.1 — Error Wrapping with %w
 	// ────────────────────────────────────────────────────────────
-	// WHY: %w wraps an error, preserving the chain. This lets
-	// callers inspect the cause with errors.Is/errors.As.
 
-	fmt.Println("\n--- Error Wrapping with %w ---")
+	fmt.Println("\n--- Wrapping with %w ---")
 	findCoach := func(name string) error {
 		if name != "Coach-S1" {
 			return ErrNotFound
 		}
 		return nil
 	}
-
 	inspectCoach := func(name string) error {
-		err := findCoach(name)
-		if err != nil {
+		if err := findCoach(name); err != nil {
 			return fmt.Errorf("inspecting %q: %w", name, err)
 		}
 		return nil
 	}
-
 	auditCoach := func(name string) error {
-		err := inspectCoach(name)
-		if err != nil {
-			return fmt.Errorf("audit failed: %w", err)
+		if err := inspectCoach(name); err != nil {
+			return fmt.Errorf("audit: %w", err)
 		}
 		return nil
 	}
 
-	err = auditCoach("Coach-B2")
-	fmt.Println("Wrapped error:", err)
-	// Output: Wrapped error: audit failed: inspecting "Coach-B2": not found
-	// WHY: Each layer adds context while preserving the original error.
+	err := auditCoach("Coach-B2")
+	fmt.Println("Wrapped:", err)
 
 	// ────────────────────────────────────────────────────────────
-	// 2.2 — errors.Is: Checking Error Identity
+	// 2.2 — errors.Is
 	// ────────────────────────────────────────────────────────────
-	// WHY: errors.Is traverses the wrap chain to find a target error.
-	// Use it instead of == for wrapped errors.
 
 	fmt.Println("\n--- errors.Is ---")
 	fmt.Println("Is ErrNotFound?", errors.Is(err, ErrNotFound))
-	// Output: Is ErrNotFound? true
 	fmt.Println("Is ErrTimeout?", errors.Is(err, ErrTimeout))
-	// Output: Is ErrTimeout? false
-	// WHY: errors.Is unwraps the chain automatically.
-
-	// Practical usage pattern
-	if errors.Is(err, ErrNotFound) {
-		fmt.Println("Action: Coach not found — check coach registry")
-	}
-	// Output: Action: Coach not found — check coach registry
 
 	// ────────────────────────────────────────────────────────────
-	// 2.3 — errors.As: Extracting Error Types
+	// 2.3 — errors.As
 	// ────────────────────────────────────────────────────────────
-	// WHY: errors.As extracts a specific error TYPE from the chain.
-	// It's the type-assertion equivalent for wrapped errors.
 
 	fmt.Println("\n--- errors.As ---")
-	validateCoach := func() error {
-		innerErr := &ValidationError{Field: "brake-pressure", Message: "exceeds safe range"}
-		return fmt.Errorf("coach check: %w", innerErr)
+	valErr := fmt.Errorf("check: %w",
+		&ValidationError{Field: "brake-pressure", Message: "exceeds safe range"})
+
+	var ve *ValidationError
+	if errors.As(valErr, &ve) {
+		fmt.Printf("Field: %q, Message: %q\n", ve.Field, ve.Message)
 	}
 
-	err = validateCoach()
-	fmt.Println("Wrapped validation error:", err)
-	// Output: Wrapped validation error: coach check: validation failed on "brake-pressure": exceeds safe range
-
-	var valErr *ValidationError
-	if errors.As(err, &valErr) {
-		fmt.Printf("Extracted — Field: %q, Message: %q\n", valErr.Field, valErr.Message)
-	}
-	// Output: Extracted — Field: "brake-pressure", Message: "exceeds safe range"
-	// WHY: errors.As unwraps and type-asserts in one step.
-
 	// ────────────────────────────────────────────────────────────
-	// 2.4 — Unwrapping Chains Manually
+	// 2.4 — Unwrapping Chain
 	// ────────────────────────────────────────────────────────────
 
-	fmt.Println("\n--- Unwrapping Chain ---")
-	chain := fmt.Errorf("layer 3: %w",
-		fmt.Errorf("layer 2: %w",
-			fmt.Errorf("layer 1: %w",
-				ErrTimeout)))
-
-	fmt.Println("Full chain:", chain)
-	// Output: Full chain: layer 3: layer 2: layer 1: operation timed out
-
-	// Walk the chain
+	fmt.Println("\n--- Unwrap Chain ---")
+	chain := fmt.Errorf("L3: %w", fmt.Errorf("L2: %w", fmt.Errorf("L1: %w", ErrTimeout)))
 	current := error(chain)
-	depth := 0
-	for current != nil {
+	for depth := 0; current != nil; depth++ {
 		fmt.Printf("  depth %d: %v\n", depth, current)
 		current = errors.Unwrap(current)
-		depth++
 	}
-	// Output:
-	//   depth 0: layer 3: layer 2: layer 1: operation timed out
-	//   depth 1: layer 2: layer 1: operation timed out
-	//   depth 2: layer 1: operation timed out
-	//   depth 3: operation timed out
 
-	// ──────────────────────────────────────────────────────────────
-	// EXAMPLE BLOCK 3 — Custom Error Types, Sentinel Errors,
-	//                    errors.Join, Practical Patterns
-	// ──────────────────────────────────────────────────────────────
+	// ============================================================
+	// EXAMPLE BLOCK 3 — Custom Errors, Sentinels, errors.Join
+	// ============================================================
 
 	// ────────────────────────────────────────────────────────────
-	// 3.1 — Custom Error Types
+	// 3.1 — Custom Error Type with Unwrap
 	// ────────────────────────────────────────────────────────────
-	// WHY: Struct errors carry structured data — error codes,
-	// field names, nested errors. They implement Unwrap() for chains.
 
 	fmt.Println("\n--- Custom Error Types ---")
-	checkTrack := func() error {
-		return &InspectionError{
-			System:  "Track-Rajdhani-Section",
-			Code:    5001,
-			Message: "track crack detected near km 42",
-			Err:     ErrTimeout,
-		}
+	trackErr := &InspectionError{
+		System: "Track-Rajdhani", Code: 5001,
+		Message: "crack near km 42", Err: ErrTimeout,
+	}
+	fmt.Println("Error:", trackErr)
+	fmt.Println("Caused by timeout?", errors.Is(trackErr, ErrTimeout))
+
+	var ie *InspectionError
+	if errors.As(trackErr, &ie) {
+		fmt.Printf("System: %s, Code: %d\n", ie.System, ie.Code)
 	}
 
-	err = checkTrack()
-	fmt.Println("Inspection error:", err)
-	// Output: Inspection error: [Track-Rajdhani-Section] error 5001: track crack detected near km 42 (caused by: operation timed out)
-
-	// errors.Is works through Unwrap
-	fmt.Println("Caused by timeout?", errors.Is(err, ErrTimeout))
-	// Output: Caused by timeout? true
-
-	// errors.As extracts the InspectionError
-	var inspErr *InspectionError
-	if errors.As(err, &inspErr) {
-		fmt.Printf("System: %s, Code: %d\n", inspErr.System, inspErr.Code)
-	}
-	// Output: System: Track-Rajdhani-Section, Code: 5001
-
 	// ────────────────────────────────────────────────────────────
-	// 3.2 — Sentinel Errors
+	// 3.2 — Sentinel Errors in Practice
 	// ────────────────────────────────────────────────────────────
-	// WHY: Sentinel errors are package-level variables that act
-	// as known error identities. Callers use errors.Is() to check.
 
 	fmt.Println("\n--- Sentinel Errors ---")
-	lookupEmployee := func(id int) (string, error) {
-		employees := map[int]string{1: "Sharma", 2: "Pappu"}
-		name, ok := employees[id]
-		if !ok {
-			return "", fmt.Errorf("employee %d: %w", id, ErrNotFound)
+	lookup := func(id int) (string, error) {
+		db := map[int]string{1: "Sharma", 2: "Pappu"}
+		if name, ok := db[id]; ok {
+			return name, nil
 		}
-		return name, nil
+		return "", fmt.Errorf("employee %d: %w", id, ErrNotFound)
 	}
-
-	authorizeEmployee := func(id int, role string) error {
-		if role != "inspector" {
-			return fmt.Errorf("employee %d with role %q: %w", id, role, ErrUnauthorized)
-		}
-		return nil
+	if _, err := lookup(99); errors.Is(err, ErrNotFound) {
+		fmt.Println("Lookup:", err)
 	}
-
-	name, err := lookupEmployee(99)
-	if errors.Is(err, ErrNotFound) {
-		fmt.Println("Employee lookup:", err)
-	}
-	// Output: Employee lookup: employee 99: not found
-
-	err = authorizeEmployee(1, "porter")
-	if errors.Is(err, ErrUnauthorized) {
-		fmt.Println("Auth check:", err)
-	}
-	// Output: Auth check: employee 1 with role "porter": unauthorized
-
-	name, err = lookupEmployee(1)
-	if err == nil {
-		fmt.Println("Found employee:", name)
-	}
-	// Output: Found employee: Sharma
 
 	// ────────────────────────────────────────────────────────────
 	// 3.3 — errors.Join (Go 1.20+)
 	// ────────────────────────────────────────────────────────────
-	// WHY: errors.Join combines multiple errors into one.
-	// errors.Is and errors.As work on ALL joined errors.
 
 	fmt.Println("\n--- errors.Join ---")
-	validateInspectionForm := func(inspectorName, badgeID string) error {
+	validate := func(name, badge string) error {
 		var errs []error
-		if strings.TrimSpace(inspectorName) == "" {
-			errs = append(errs, &ValidationError{Field: "inspector_name", Message: "required"})
+		if strings.TrimSpace(name) == "" {
+			errs = append(errs, &ValidationError{Field: "name", Message: "required"})
 		}
-		if !strings.Contains(badgeID, "-") {
-			errs = append(errs, &ValidationError{Field: "badge_id", Message: "invalid format"})
-		}
-		if len(inspectorName) > 0 && len(inspectorName) < 3 {
-			errs = append(errs, &ValidationError{Field: "inspector_name", Message: "too short (min 3)"})
+		if !strings.Contains(badge, "-") {
+			errs = append(errs, &ValidationError{Field: "badge", Message: "invalid format"})
 		}
 		if len(errs) > 0 {
 			return errors.Join(errs...)
 		}
 		return nil
 	}
-
-	err = validateInspectionForm("", "BADBADGE")
-	if err != nil {
-		fmt.Println("Validation errors:")
-		fmt.Println(" ", err)
-	}
-	// Output:
-	// Validation errors:
-	//   validation failed on "inspector_name": required
-	//   validation failed on "badge_id": invalid format
-
-	// errors.As finds the FIRST matching error in the joined set
-	var vErr *ValidationError
-	if errors.As(err, &vErr) {
-		fmt.Printf("First validation error — field: %q\n", vErr.Field)
-	}
-	// Output: First validation error — field: "inspector_name"
-
-	// ────────────────────────────────────────────────────────────
-	// 3.4 — Practical Pattern: Multi-step Operation
-	// ────────────────────────────────────────────────────────────
-	// WHY: Real code chains operations, wrapping errors at each level.
-
-	fmt.Println("\n--- Practical: Multi-step Inspection ---")
-	runInspection := func(sectionID string) error {
-		// Step 1: Find section
-		if sectionID == "" {
-			return fmt.Errorf("inspection: %w", errors.New("section ID required"))
-		}
-		// Step 2: Check status
-		if sectionID == "closed-section" {
-			return fmt.Errorf("inspection of %q: %w",
-				sectionID,
-				&InspectionError{System: sectionID, Code: 503, Message: "signal failure on track", Err: ErrTimeout})
-		}
-		// Step 3: Success
-		return nil
+	if err := validate("", "BADBADGE"); err != nil {
+		fmt.Println("Validation errors:\n ", err)
 	}
 
-	for _, secID := range []string{"rajdhani-section", "", "closed-section"} {
-		err := runInspection(secID)
-		if err == nil {
-			fmt.Printf("  %q: PASSED\n", secID)
-		} else {
-			fmt.Printf("  %q: FAILED — %v\n", secID, err)
-		}
-	}
-	// Output:
-	//   "rajdhani-section": PASSED
-	//   "": FAILED — inspection: section ID required
-	//   "closed-section": FAILED — inspection of "closed-section": [closed-section] error 503: signal failure on track (caused by: operation timed out)
-
 	// ────────────────────────────────────────────────────────────
-	// 3.5 — Error Handling Decision Guide
+	// 3.4 — Decision Guide
 	// ────────────────────────────────────────────────────────────
 
-	fmt.Println("\n--- Error Handling Decision Guide ---")
-	fmt.Println("1. Simple message? → errors.New(\"msg\")")
-	guide2 := "2. Dynamic context? → fmt.Errorf(\"context: %v\", val)"
-	guide3 := "3. Preserve cause?  → fmt.Errorf(\"context: %w\", err)"
-	fmt.Println(guide2)
-	fmt.Println(guide3)
-	fmt.Println("4. Check identity?  → errors.Is(err, ErrSentinel)")
-	fmt.Println("5. Extract type?    → errors.As(err, &target)")
-	fmt.Println("6. Structured data? → Custom error type with Unwrap()")
-	fmt.Println("7. Multiple errors? → errors.Join(err1, err2, ...)")
+	fmt.Println("\n--- Decision Guide ---")
+	fmt.Println("  Simple message?   → errors.New()")
+	fmt.Println("  Dynamic context?  → fmt.Errorf(\"%v\")")
+	fmt.Println("  Preserve cause?   → fmt.Errorf(\"%w\")")
+	fmt.Println("  Check identity?   → errors.Is()")
+	fmt.Println("  Extract type?     → errors.As()")
+	fmt.Println("  Multiple errors?  → errors.Join()")
 
 	// ============================================================
 	// KEY TAKEAWAYS
 	// ============================================================
-	// 1. error is an interface: { Error() string } — simple but powerful.
-	// 2. Return (value, error) — always check error BEFORE using value.
-	// 3. errors.New for simple errors, fmt.Errorf for formatted ones.
-	// 4. %w wraps errors, preserving the chain for Is/As/Unwrap.
-	// 5. errors.Is checks identity through the wrap chain.
-	// 6. errors.As extracts a specific error TYPE from the chain.
-	// 7. Sentinel errors (ErrNotFound) are package-level comparison targets.
-	// 8. Custom error types carry structured data (codes, fields, causes).
-	// 9. errors.Join (Go 1.20+) combines multiple errors into one.
-	// 10. Never ignore errors — they are Go's explicit control flow.
+	// 1. error interface: { Error() string }
+	// 2. Return (value, error) — check error FIRST.
+	// 3. errors.New for simple; fmt.Errorf for formatted.
+	// 4. %w wraps errors for Is/As/Unwrap.
+	// 5. errors.Is checks identity through wrap chain.
+	// 6. errors.As extracts specific error types.
+	// 7. Sentinel errors: package-level comparison targets.
+	// 8. Custom errors carry structured data + Unwrap().
+	// 9. errors.Join combines multiple errors (Go 1.20+).
+	// 10. Never ignore errors.
 }

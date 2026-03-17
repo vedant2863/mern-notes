@@ -1,252 +1,103 @@
 // ============================================================
 // FILE 07: LINKED LISTS — SINGLY, DOUBLY, AND CLASSIC PROBLEMS
-// Topic: Linked list data structures and pointer manipulation
-// WHY: Linked lists teach pointer-based thinking essential for
-//   trees, graphs, and low-level memory management. Understanding
-//   node-based structures unlocks the rest of DSA.
+// Topic: Node-based data structures and pointer manipulation
+// WHY: Linked lists teach pointer thinking essential for trees,
+//   graphs, and memory management. Foundation for advanced DSA.
 // ============================================================
 
 // ============================================================
-// EXAMPLE 1 — Spotify India Playlist
-// Story: Spotify India's playlist is a linked list. Each song
-//   is a node pointing to the next track. Users can insert a
-//   new song between two tracks, remove a song, or skip ahead
-//   — all without shifting an entire array of 500 songs.
+// STORY — Spotify India Playlist
+// Each song is a node pointing to the next. Insert/remove songs
+// without shifting an entire array — just rewire pointers.
 // ============================================================
 
-// WHY: Arrays require shifting O(n) elements on insert/delete.
-// Linked lists only need to update a few pointers — O(1) if you
-// have a reference to the node. This trade-off matters when
-// insertions and deletions are frequent.
-
-// --- Linked List vs Array Trade-offs ---
-//
-// | Operation          | Array      | Linked List        |
-// |--------------------|------------|---------------------|
-// | Access by index    | O(1)       | O(n) — must traverse |
-// | Insert at start    | O(n)       | O(1) — update head   |
-// | Insert at end      | O(1)*      | O(1) with tail ptr   |
-// | Insert at middle   | O(n)       | O(1) if have node    |
-// | Delete at start    | O(n)       | O(1) — update head   |
-// | Delete at middle   | O(n)       | O(1) if have node    |
-// | Search             | O(n)       | O(n) — must traverse |
-// | Cache friendliness | Excellent  | Poor                 |
-// * amortized for dynamic arrays
+// Arrays: O(n) shift on insert/delete. Linked lists: O(1) if you have the node.
+// But arrays win on cache locality and random access O(1).
 
 // ============================================================
-// EXAMPLE 2 — Singly Linked List (Full Implementation)
-// Story: PhonePe builds a transaction history feature. Each
-//   transaction is a node pointing to the next (older) one.
-//   Users scroll from newest to oldest — a singly linked list.
+// SECTION 1 — Singly Linked List
 // ============================================================
 
-// WHY: A singly linked list is the simplest node-based structure.
-// It is the foundation for stacks, queues, hash table chaining,
-// and adjacency lists in graphs.
-
-// --- What is a Linked List? ---
-// A linked list is a sequence of nodes where each node contains:
-//   1. A value (the data)
-//   2. A pointer to the next node (or null if it is the last)
-//
-// Unlike arrays, linked list nodes are NOT stored in contiguous memory.
-// Each node is a separate object on the heap, connected by references.
-//
-// Visual representation:
-//   head → [value|next] → [value|next] → [value|next] → null
-//   Each box is a node. The arrow is the `next` pointer.
-
-// --- Node Class ---
 class SLLNode {
-  constructor(value) {
-    this.value = value;  // the data stored in this node
-    this.next = null;    // pointer to next node (null if last)
-  }
+  constructor(value) { this.value = value; this.next = null; }
 }
 
 class SinglyLinkedList {
   constructor() { this.head = null; this._size = 0; }
 
-  // append: add to end — O(n) because we must traverse to find the tail
-  // (Could be O(1) with a tail pointer, but keeping it simple here)
-  append(value) {
-    const newNode = new SLLNode(value);
-    if (!this.head) {
-      this.head = newNode; // first node becomes head
-    } else {
-      let current = this.head;
-      while (current.next) {  // traverse to last node — O(n)
-        current = current.next;
-      }
-      current.next = newNode; // link last node to new node
-    }
-    this._size++;
-    return this; // enable chaining: list.append(1).append(2)
-  }
-
-  // prepend: add to front — O(1)
-  // New node's next points to current head, then new node becomes head
-  prepend(value) {
-    const newNode = new SLLNode(value);
-    newNode.next = this.head; // new node points to old head
-    this.head = newNode;      // new node becomes the head
+  append(value) { // O(n) — traverse to tail. O(1) with tail pointer.
+    const node = new SLLNode(value);
+    if (!this.head) { this.head = node; }
+    else { let c = this.head; while (c.next) c = c.next; c.next = node; }
     this._size++;
     return this;
   }
 
-  // insertAt: insert at specific index — O(n)
-  // Traverse to node BEFORE insertion point, then rewire pointers
-  insertAt(index, value) {
-    if (index < 0 || index > this._size) {
-      throw new RangeError(`Index ${index} out of bounds (size=${this._size})`);
-    }
+  prepend(value) { // O(1)
+    const node = new SLLNode(value);
+    node.next = this.head;
+    this.head = node;
+    this._size++;
+    return this;
+  }
+
+  insertAt(index, value) { // O(n)
+    if (index < 0 || index > this._size) throw new RangeError("Out of bounds");
     if (index === 0) return this.prepend(value);
-
-    const newNode = new SLLNode(value);
-    let current = this.head;
-    // traverse to the node BEFORE the insertion point
-    for (let i = 0; i < index - 1; i++) {
-      current = current.next;
-    }
-    newNode.next = current.next; // new node points to what was at index
-    current.next = newNode;      // previous node points to new node
+    const node = new SLLNode(value);
+    let c = this.head;
+    for (let i = 0; i < index - 1; i++) c = c.next;
+    node.next = c.next;
+    c.next = node;
     this._size++;
     return this;
   }
 
-  // removeAt: remove node at index — O(n)
-  // For index 0: just move head forward
-  // Otherwise: traverse to node before target, skip over target
-  removeAt(index) {
-    if (index < 0 || index >= this._size) {
-      throw new RangeError(`Index ${index} out of bounds (size=${this._size})`);
-    }
-    let removedValue;
-    if (index === 0) {
-      removedValue = this.head.value;
-      this.head = this.head.next; // head moves to next node
-    } else {
-      let current = this.head;
-      for (let i = 0; i < index - 1; i++) {
-        current = current.next;
-      }
-      removedValue = current.next.value;
-      current.next = current.next.next; // skip over removed node
+  removeAt(index) { // O(n)
+    if (index < 0 || index >= this._size) throw new RangeError("Out of bounds");
+    let val;
+    if (index === 0) { val = this.head.value; this.head = this.head.next; }
+    else {
+      let c = this.head;
+      for (let i = 0; i < index - 1; i++) c = c.next;
+      val = c.next.value;
+      c.next = c.next.next;
     }
     this._size--;
-    return removedValue;
+    return val;
   }
 
-  // removeValue: remove first occurrence of value — O(n)
-  // Handles special case of head removal, then traverses to find value
-  removeValue(value) {
-    if (!this.head) return false;
-    if (this.head.value === value) {
-      this.head = this.head.next;
-      this._size--;
-      return true;
-    }
-    let current = this.head;
-    while (current.next) {
-      if (current.next.value === value) {
-        current.next = current.next.next; // skip the node with matching value
-        this._size--;
-        return true;
-      }
-      current = current.next;
-    }
-    return false; // value not found
-  }
-
-  // get: access by index — O(n), must traverse from head
   get(index) {
     if (index < 0 || index >= this._size) return undefined;
-    let current = this.head;
-    for (let i = 0; i < index; i++) current = current.next;
-    return current.value;
+    let c = this.head;
+    for (let i = 0; i < index; i++) c = c.next;
+    return c.value;
   }
 
-  // contains: check if value exists — O(n) traversal
   contains(value) {
-    let current = this.head;
-    while (current) {
-      if (current.value === value) return true;
-      current = current.next;
-    }
+    let c = this.head;
+    while (c) { if (c.value === value) return true; c = c.next; }
     return false;
   }
 
-  // indexOf: find index of first occurrence — O(n)
-  indexOf(value) {
-    let current = this.head;
-    let index = 0;
-    while (current) {
-      if (current.value === value) return index;
-      current = current.next;
-      index++;
-    }
-    return -1; // not found
-  }
-
-  // toArray: convert linked list to array — O(n)
-  toArray() {
-    const result = [];
-    let current = this.head;
-    while (current) {
-      result.push(current.value);
-      current = current.next;
-    }
-    return result;
-  }
-
-  // print: display the list with arrows — O(n)
-  print() {
-    console.log(this.toArray().join(" -> ") + " -> null");
-  }
-
-  // size — O(1), we maintain a counter
-  size() {
-    return this._size;
-  }
+  toArray() { const r = []; let c = this.head; while (c) { r.push(c.value); c = c.next; } return r; }
+  print() { console.log(this.toArray().join(" -> ") + " -> null"); }
+  size() { return this._size; }
 }
 
-// Big-O Summary for SinglyLinkedList:
-// append:      O(n) [O(1) with tail pointer]
-// prepend:     O(1)
-// insertAt:    O(n)
-// removeAt:    O(n)
-// removeValue: O(n)
-// get:         O(n)
-// contains:    O(n)
-// indexOf:     O(n)
-// Space:       O(n)
-
-console.log("=== Singly Linked List (Spotify Playlist) ===");
+console.log("=== Singly Linked List ===");
 const playlist = new SinglyLinkedList();
 playlist.append("Tum Hi Ho").append("Chaiyya Chaiyya").append("Kal Ho Naa Ho");
-playlist.print(); // Tum Hi Ho -> Chaiyya Chaiyya -> Kal Ho Naa Ho -> null
-
 playlist.prepend("Kun Faya Kun");
-playlist.insertAt(2, "Jai Ho");
-playlist.print(); // Kun Faya Kun -> Tum Hi Ho -> Jai Ho -> Chaiyya Chaiyya -> Kal Ho Naa Ho -> null
-
-console.log("Removed:", playlist.removeAt(2)); // Jai Ho
-console.log("Song at index 1:", playlist.get(1)); // Tum Hi Ho
-console.log("Contains 'Chaiyya Chaiyya':", playlist.contains("Chaiyya Chaiyya")); // true
-console.log("Index of 'Kal Ho Naa Ho':", playlist.indexOf("Kal Ho Naa Ho")); // 2
-console.log("Playlist size:", playlist.size()); // 4
+playlist.print();
+console.log("Get index 1:", playlist.get(1));
+console.log("Contains 'Chaiyya Chaiyya':", playlist.contains("Chaiyya Chaiyya"));
 console.log();
 
 // ============================================================
-// EXAMPLE 3 — Doubly Linked List
-// Story: Amazon India's product comparison lets users navigate
-//   back and forth between products. Each node has next + prev
-//   pointers, enabling O(1) traversal in both directions.
+// SECTION 2 — Doubly Linked List
+// next + prev pointers. O(1) removeLast (impossible in SLL without traversal).
 // ============================================================
-
-// WHY: DLL allows O(1) removal if you have the node reference
-// (no need to find the previous node). removeLast is O(1) with
-// tail pointer — impossible in SLL without traversal.
 
 class DLLNode {
   constructor(value) { this.value = value; this.next = null; this.prev = null; }
@@ -269,25 +120,6 @@ class DoublyLinkedList {
     this._size++; return this;
   }
 
-  // insertAt: O(n) — optimized to start from closer end
-  insertAt(index, value) {
-    if (index < 0 || index > this._size) throw new RangeError("Out of bounds");
-    if (index === 0) return this.prepend(value);
-    if (index === this._size) return this.append(value);
-    const node = new DLLNode(value);
-    let current;
-    if (index <= this._size / 2) {
-      current = this.head;
-      for (let i = 0; i < index; i++) current = current.next;
-    } else {
-      current = this.tail;
-      for (let i = this._size - 1; i > index; i--) current = current.prev;
-    }
-    node.next = current; node.prev = current.prev;
-    current.prev.next = node; current.prev = node;
-    this._size++; return this;
-  }
-
   removeFirst() { // O(1)
     if (!this.head) return undefined;
     const val = this.head.value;
@@ -304,140 +136,81 @@ class DoublyLinkedList {
     this._size--; return val;
   }
 
-  get(index) { // O(n) — starts from closer end
-    if (index < 0 || index >= this._size) return undefined;
-    let c;
-    if (index <= this._size / 2) { c = this.head; for (let i = 0; i < index; i++) c = c.next; }
-    else { c = this.tail; for (let i = this._size - 1; i > index; i--) c = c.prev; }
-    return c.value;
-  }
-
   toArray() { const r = []; let c = this.head; while (c) { r.push(c.value); c = c.next; } return r; }
-  printForward()  { console.log("Forward:  null <- " + this.toArray().join(" <-> ") + " -> null"); }
-  printBackward() {
-    const r = []; let c = this.tail; while (c) { r.push(c.value); c = c.prev; }
-    console.log("Backward: null <- " + r.join(" <-> ") + " -> null");
-  }
+  print() { console.log("null <- " + this.toArray().join(" <-> ") + " -> null"); }
   size() { return this._size; }
 }
 
-// Big-O Summary for DoublyLinkedList:
-// append:      O(1) — tail pointer
-// prepend:     O(1)
-// removeFirst: O(1)
-// removeLast:  O(1) — DLL advantage over SLL! SLL needs O(n) for this
-// insertAt:    O(n) — optimized to traverse from closer end
-// get:         O(n) — optimized to traverse from closer end
-// Space:       O(n) — extra prev pointer per node adds memory overhead
-
-console.log("=== Doubly Linked List (Amazon Product Comparison) ===");
+console.log("=== Doubly Linked List ===");
 const products = new DoublyLinkedList();
 products.append("iPhone 15").append("Samsung S24").append("OnePlus 12").append("Pixel 8");
-products.printForward();
-// Forward:  null <- iPhone 15 <-> Samsung S24 <-> OnePlus 12 <-> Pixel 8 -> null
-products.printBackward();
-// Backward: null <- Pixel 8 <-> OnePlus 12 <-> Samsung S24 <-> iPhone 15 -> null
-
-products.prepend("Nothing Phone 2");
-console.log("After prepend 'Nothing Phone 2':");
-products.printForward();
-
+products.print();
 console.log("Removed last:", products.removeLast()); // Pixel 8
-console.log("Removed first:", products.removeFirst()); // Nothing Phone 2
-products.printForward(); // iPhone 15 <-> Samsung S24 <-> OnePlus 12
-console.log("Size:", products.size()); // 3
+console.log("Removed first:", products.removeFirst()); // iPhone 15
+products.print();
 console.log();
 
 // ============================================================
-// CLASSIC PROBLEM 1 — Reverse a Linked List (Iterative)
-// Story: IRCTC shows train stops origin to destination. A user
-//   wants the return journey — same stops, reversed. We flip
-//   next pointers using prev/curr/next in O(n) time, O(1) space.
+// SECTION 3 — Classic Problems
 // ============================================================
 
-// WHY: The most fundamental pointer manipulation problem.
-// Visualization:
-// Before: A -> B -> C -> D -> null
-// Step 1: null <- A    B -> C -> D
-// Step 2: null <- A <- B    C -> D
-// Step 3: null <- A <- B <- C    D
-// Step 4: null <- A <- B <- C <- D  (D is new head)
-
+// --- Reverse a Linked List (Iterative) ---
+// Flip next pointers using prev/curr/next. O(n) time, O(1) space.
 function reverseLinkedList(head) {
-  let prev = null, curr = head, next = null;
+  let prev = null, curr = head;
   while (curr !== null) {
-    next = curr.next;  // save next
-    curr.next = prev;  // reverse pointer
-    prev = curr;       // advance prev
-    curr = next;       // advance curr
+    const next = curr.next;
+    curr.next = prev;
+    prev = curr;
+    curr = next;
   }
   return prev; // new head
 }
 
-console.log("=== Problem 1: Reverse a Linked List ===");
-const trainStops = new SinglyLinkedList();
-trainStops.append("Delhi").append("Agra").append("Jhansi").append("Bhopal").append("Chennai");
-console.log("Original:"); trainStops.print();
-trainStops.head = reverseLinkedList(trainStops.head);
-console.log("Reversed:"); trainStops.print();
-console.log();
+console.log("--- Reverse ---");
+const stops = new SinglyLinkedList();
+stops.append("Delhi").append("Agra").append("Bhopal").append("Chennai");
+console.log("Original:"); stops.print();
+stops.head = reverseLinkedList(stops.head);
+console.log("Reversed:"); stops.print();
 
-// ============================================================
-// CLASSIC PROBLEM 2 — Detect Cycle (Floyd's Tortoise and Hare)
-// Story: Swiggy's routing must detect if a route loops. Floyd's
-//   uses slow (1 step) and fast (2 steps) pointers. If they
-//   meet, a cycle exists. O(n) time, O(1) space.
-// ============================================================
-
+// --- Detect Cycle (Floyd's Tortoise and Hare) ---
+// Slow (1 step) + fast (2 steps). If they meet, cycle exists. O(n), O(1).
 function hasCycle(head) {
-  if (!head || !head.next) return false;
   let slow = head, fast = head;
   while (fast && fast.next) {
     slow = slow.next;
     fast = fast.next.next;
-    if (slow === fast) return true; // cycle detected!
+    if (slow === fast) return true;
   }
   return false;
 }
 
-console.log("=== Problem 2: Detect Cycle (Floyd's Algorithm) ===");
+console.log("\n--- Cycle Detection ---");
 const noCycle = new SLLNode(1);
 noCycle.next = new SLLNode(2); noCycle.next.next = new SLLNode(3);
-console.log("1->2->3->null has cycle?", hasCycle(noCycle)); // false
+console.log("1->2->3 has cycle?", hasCycle(noCycle)); // false
 
 const withCycle = new SLLNode(1);
 withCycle.next = new SLLNode(2); withCycle.next.next = new SLLNode(3);
-withCycle.next.next.next = new SLLNode(4);
-withCycle.next.next.next.next = withCycle.next; // 4 -> 2 (cycle!)
-console.log("1->2->3->4->(2) has cycle?", hasCycle(withCycle)); // true
-console.log();
+withCycle.next.next.next = withCycle.next; // 3 -> 2 (cycle)
+console.log("1->2->3->(2) has cycle?", hasCycle(withCycle)); // true
 
-// ============================================================
-// CLASSIC PROBLEM 3 — Find Middle Node
-// Story: BookMyShow's waitlist: find the middle person using
-//   slow/fast pointers in one pass. O(n) time, O(1) space.
-// ============================================================
-
+// --- Find Middle Node ---
+// Slow (1 step) + fast (2 steps). When fast reaches end, slow is at middle.
 function findMiddle(head) {
-  if (!head) return null;
   let slow = head, fast = head;
   while (fast && fast.next) { slow = slow.next; fast = fast.next.next; }
   return slow.value;
 }
 
-console.log("=== Problem 3: Find Middle Node ===");
+console.log("\n--- Find Middle ---");
 const waitlist = new SinglyLinkedList();
-waitlist.append("Arun").append("Bhavna").append("Chetan").append("Deepa").append("Esha");
-waitlist.print();
-console.log("Middle:", findMiddle(waitlist.head)); // Chetan
-console.log();
+waitlist.append("A").append("B").append("C").append("D").append("E");
+console.log("Middle:", findMiddle(waitlist.head)); // C
 
-// ============================================================
-// CLASSIC PROBLEM 4 — Merge Two Sorted Linked Lists
-// Story: Zomato merges two sorted restaurant lists from Google
-//   and its own reviews. Two-pointer merge in O(n+m), O(1) space.
-// ============================================================
-
+// --- Merge Two Sorted Lists ---
+// Two-pointer merge with dummy node. O(n+m), O(1) extra space.
 function mergeSortedLists(h1, h2) {
   const dummy = new SLLNode(0);
   let curr = dummy;
@@ -450,120 +223,50 @@ function mergeSortedLists(h1, h2) {
   return dummy.next;
 }
 
-console.log("=== Problem 4: Merge Two Sorted Lists ===");
-const l1 = new SinglyLinkedList(); l1.append(1).append(3).append(5).append(7);
-const l2 = new SinglyLinkedList(); l2.append(2).append(4).append(6).append(8);
-console.log("List 1:"); l1.print();
-console.log("List 2:"); l2.print();
+console.log("\n--- Merge Sorted Lists ---");
+const l1 = new SinglyLinkedList(); l1.append(1).append(3).append(5);
+const l2 = new SinglyLinkedList(); l2.append(2).append(4).append(6);
 const merged = mergeSortedLists(l1.head, l2.head);
 let c = merged; const arr = [];
 while (c) { arr.push(c.value); c = c.next; }
-console.log("Merged:", arr.join(" -> ") + " -> null");
-console.log();
+console.log("Merged:", arr.join(" -> "));
 
-// ============================================================
-// CLASSIC PROBLEM 5 — Remove Nth Node from End
-// Story: Paytm transaction history — delete Nth-from-last entry
-//   using two pointers with n-gap in one pass. O(n), O(1).
-// ============================================================
-
+// --- Remove Nth from End ---
+// Two pointers with n-gap. Single pass. O(n), O(1).
 function removeNthFromEnd(head, n) {
   const dummy = new SLLNode(0); dummy.next = head;
   let fast = dummy, slow = dummy;
-  for (let i = 0; i <= n; i++) fast = fast.next; // n+1 gap
+  for (let i = 0; i <= n; i++) fast = fast.next;
   while (fast) { fast = fast.next; slow = slow.next; }
-  console.log(`  Removing: ${slow.next.value}`);
   slow.next = slow.next.next;
   return dummy.next;
 }
 
-console.log("=== Problem 5: Remove Nth from End ===");
+console.log("\n--- Remove Nth from End ---");
 const txns = new SinglyLinkedList();
-txns.append("TXN-100").append("TXN-200").append("TXN-300").append("TXN-400").append("TXN-500");
+txns.append("A").append("B").append("C").append("D").append("E");
 console.log("Before:"); txns.print();
-txns.head = removeNthFromEnd(txns.head, 2); // removes TXN-400
+txns.head = removeNthFromEnd(txns.head, 2); // removes D
 console.log("After removing 2nd from end:"); txns.print();
-console.log();
 
 // ============================================================
-// EXAMPLE 4 — When to Use Linked Lists
-// Story: V8 optimizes arrays with hidden classes and inline
-//   caches. For most JS use cases, arrays outperform linked
-//   lists due to CPU cache friendliness.
+// SECTION 4 — When to Use Linked Lists vs Arrays
 // ============================================================
-
-// WHY: Modern CPUs love contiguous memory (arrays) because of
-// cache lines. Linked list nodes scatter across memory, causing
-// cache misses. JS arrays handle most use cases well.
-// But linked lists are better for specific use cases:
-
-console.log("=== When to Use Linked Lists ===");
-console.log("Use Arrays when:");
-console.log("  - You need random access by index");
-console.log("  - Mostly reading, rarely inserting/deleting in middle");
-console.log("  - Cache performance matters (tight loops over data)");
-console.log();
-console.log("Use Linked Lists when:");
-console.log("  - Frequent insert/delete at arbitrary positions");
-console.log("  - You already have a reference to the node to operate on");
-console.log("  - Building LRU cache (remove + insert at both ends)");
-console.log("  - Undo/redo history (doubly linked list)");
-console.log("  - Music playlists (insert/remove songs anywhere)");
-console.log("  - Implementing stacks, queues, or hash table chaining");
-console.log();
-console.log("Why JS has no built-in LinkedList:");
-console.log("  V8 optimizes arrays with hidden classes and inline caches.");
-console.log("  For most JS use cases, arrays outperform linked lists.");
-console.log("  Java has java.util.LinkedList; JS does not need one.");
-console.log();
-
-// ============================================================
-// Big-O Summary of All Operations
-// ============================================================
-//
-// --- Singly Linked List ---
-// | Operation    | Time   | Notes                          |
-// |------------- |--------|--------------------------------|
-// | prepend      | O(1)   | update head                    |
-// | append       | O(n)   | traverse to tail (O(1) w/tail) |
-// | insertAt     | O(n)   | traverse to position           |
-// | removeAt     | O(n)   | traverse to position           |
-// | removeValue  | O(n)   | search + remove                |
-// | get          | O(n)   | traverse                       |
-// | contains     | O(n)   | traverse                       |
-// | reverse      | O(n)   | three-pointer technique         |
-// | find middle  | O(n)   | slow/fast pointers              |
-// | detect cycle | O(n)   | Floyd's tortoise and hare       |
-//
-// --- Doubly Linked List ---
-// | Operation    | Time   | Notes                          |
-// |------------- |--------|--------------------------------|
-// | prepend      | O(1)   | update head                    |
-// | append       | O(1)   | update tail                    |
-// | removeFirst  | O(1)   | update head                    |
-// | removeLast   | O(1)   | update tail (SLL cannot!)      |
-// | insertAt     | O(n)   | traverse from closer end       |
-// | get          | O(n)   | traverse from closer end       |
+// USE Arrays: random access, mostly reading, cache performance
+// USE Linked Lists: frequent insert/delete at arbitrary positions,
+//   LRU cache, undo/redo, implementing stacks/queues/hash chaining
+// JS has no built-in LinkedList — V8 optimizes arrays well enough
+//   for most use cases.
 
 // ============================================================
 // KEY TAKEAWAYS
 // ============================================================
-// 1. Linked list = nodes with value + pointer(s). No contiguous memory.
-//    Each node is independently allocated on the heap.
-// 2. Singly LL: each node has `next`. Prepend O(1), append O(n)
-//    unless you maintain a tail pointer.
-// 3. Doubly LL: each node has `next` + `prev`. Insert/remove from
-//    both ends is O(1). removeLast is O(1) — SLL cannot do this.
-// 4. Classic problems and their techniques:
-//    - Reverse: prev/curr/next pointer flipping. O(n) time, O(1) space.
-//    - Cycle detection: Floyd's slow/fast pointers. O(n) time, O(1) space.
-//    - Find middle: slow (1 step) and fast (2 steps) pointers.
-//    - Merge sorted lists: two-pointer technique. O(n+m) time.
-//    - Remove nth from end: two pointers with n-gap. Single pass.
-// 5. JS arrays are almost always faster due to cache locality.
-//    Use linked lists only when pointer-based operations give
-//    a clear algorithmic advantage (LRU cache, undo history, etc.).
-// 6. Linked lists are the foundation for trees and graphs —
-//    a tree node is just a linked list node with multiple children.
-
-console.log("=== FILE 07 COMPLETE ===");
+// 1. SLL: prepend O(1), append O(n) unless tail pointer maintained
+// 2. DLL: insert/remove from both ends O(1). removeLast is O(1)
+// 3. Reverse: prev/curr/next flipping. O(n), O(1)
+// 4. Cycle detection: Floyd's slow/fast. O(n), O(1)
+// 5. Find middle: slow/fast pointers. O(n)
+// 6. Merge sorted: two-pointer with dummy node. O(n+m)
+// 7. Remove nth from end: two pointers with n-gap
+// 8. Linked lists are foundation for trees and graphs
+// ============================================================

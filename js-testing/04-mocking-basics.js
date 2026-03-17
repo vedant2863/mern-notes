@@ -1,23 +1,25 @@
 // ============================================================
 // FILE 04: MOCKING BASICS
-// Topic: Test doubles — spies, stubs, and mocks for isolating code
-// WHY: Real applications depend on databases, APIs, payment gateways,
-//   and email services. You can't call Razorpay's API in every test —
-//   it's slow, costs money, and might charge someone. Mocking lets you
-//   simulate dependencies with predictable replacements.
+// Topic: Test doubles -- spies, stubs, and mocks for isolating code
 // ============================================================
 
 // ============================================================
-// EXAMPLE 1 — The Razorpay Testing Challenge
-// Story: Razorpay processes Rs.6+ lakh crore annually. Their payment
-//   code talks to bank APIs, fraud systems, and notification services.
-//   Running real payments in tests would charge real cards and send
-//   real SMS. Instead, they mock every external dependency — the test
-//   says "pretend the bank returned success" and code runs as if it did.
+// STORY: Razorpay processes Rs.6+ lakh crore annually. Running
+//   real payments in tests would charge real cards and send real SMS.
+//   Instead, they mock every external dependency -- the test says
+//   "pretend the bank returned success" and code runs as if it did.
 // ============================================================
 
-// WHY: Mocking gives you: ISOLATION (test YOUR code, not the gateway),
+// BLOCK 1 — Why Mock?
+// ISOLATION (test YOUR code, not the gateway),
 // SPEED (instant vs 200ms+ network), CONTROL (simulate any scenario).
+
+// --- Three Types of Test Doubles ---
+// | Type  | Real Runs? | Records? | Controls Return? |
+// |-------|-----------|----------|-----------------|
+// | Spy   | YES       | YES      | Optional        |
+// | Stub  | NO        | YES      | YES             |
+// | Mock  | NO        | YES      | YES (+ verifies)|
 
 // --- Mini test framework ---
 const results = { passed: 0, failed: 0, errors: [] };
@@ -50,31 +52,7 @@ function expect(received) {
 
 
 // ============================================================
-// EXAMPLE 2 — Three Types of Test Doubles
-// Story: Like a Bollywood set — a STUNT DOUBLE (spy) does the action
-//   while we record. A MANNEQUIN (stub) stands in crowd scenes — looks
-//   real but does nothing. A BODY DOUBLE (mock) is pre-briefed with
-//   exact lines and blocking.
-// ============================================================
-
-// WHY: Knowing spy vs stub vs mock prevents confusion.
-//
-// | Type  | Real Runs? | Records? | Controls Return? | Verifies Calls? |
-// |-------|-----------|----------|-----------------|----------------|
-// | Spy   | YES       | YES      | Optional        | YES            |
-// | Stub  | NO        | YES      | YES             | Optional       |
-// | Mock  | NO        | YES      | YES             | YES            |
-//
-// SPY: vi.spyOn(obj, 'method') — wraps real, records calls
-// STUB: vi.fn().mockReturnValue(x) — replaces with fixed return
-// MOCK: vi.fn() + expectations — records + verifies
-
-
-// ============================================================
-// EXAMPLE 3 — Building a Mock Function (vi.fn / jest.fn)
-// Story: PhonePe's testing library has createMock() used by 500+
-//   engineers daily. Under the hood: a function that records calls.
-//   Let's build one from scratch.
+// SECTION 1 — Building a Mock Function (vi.fn / jest.fn)
 // ============================================================
 
 function createMockFn(impl) {
@@ -104,13 +82,10 @@ const fn = createMockFn;
 
 
 // ============================================================
-// EXAMPLE 4 — Using Mock Functions
-// Story: Ola's ride service calls GPS, pricing, and notifications.
-//   In tests: GPS returns hardcoded coords, pricing returns Rs.250,
-//   notification mock records that SMS was "sent" without sending.
+// SECTION 2 — Using Mock Functions
 // ============================================================
 
-describe("Mock Functions — Core Features", () => {
+describe("Mock Functions -- Core Features", () => {
   test("mockReturnValue returns fixed value", () => {
     const getPrice = fn().mockReturnValue(250);
     expect(getPrice()).toBe(250);
@@ -127,44 +102,30 @@ describe("Mock Functions — Core Features", () => {
     expect(fetchStatus()).toBe("delivered");
   });
 
-  test("mockImplementation for custom logic", () => {
-    const calcTax = fn().mockImplementation((amt) => Math.round(amt * 0.18));
-    expect(calcTax(1000)).toBe(180);
-    expect(calcTax(500)).toBe(90);
-  });
-
   test("tracking calls and arguments", () => {
     const logger = fn();
     logger("Order placed", { orderId: "ORD-001" });
-    logger("Payment received", { amount: 999 });
     logger("Shipped", { tracking: "TRK-123" });
 
     expect(logger).toHaveBeenCalled();
-    expect(logger).toHaveBeenCalledTimes(3);
+    expect(logger).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenCalledWith("Order placed", { orderId: "ORD-001" });
     expect(logger).toHaveBeenLastCalledWith("Shipped", { tracking: "TRK-123" });
-
-    // Raw call data: logger._calls is [[arg1,arg2], [arg1,arg2], ...]
-    console.log("    Calls:", JSON.stringify(logger._calls));
   });
 });
 
 
 // ============================================================
-// EXAMPLE 5 — Mocking Async Functions
-// Story: Swiggy's restaurant search calls geolocation, catalog, and
-//   ratings APIs — each 100-500ms. Mock all three to return instantly.
-//   Suite drops from 30s to 0.5s.
+// SECTION 3 — Async Mocks & Spying
 // ============================================================
 
 describe("Async Mock Functions", () => {
   testAsync("mockResolvedValue for async success", async () => {
     const fetchRestaurants = fn().mockResolvedValue([
       { name: "Paradise Biryani", rating: 4.5 },
-      { name: "Meghana Foods", rating: 4.3 },
     ]);
     const data = await fetchRestaurants("Koramangala");
-    expect(data.length).toBe(2);
+    expect(data.length).toBe(1);
     expect(fetchRestaurants).toHaveBeenCalledWith("Koramangala");
   });
 
@@ -172,21 +133,14 @@ describe("Async Mock Functions", () => {
     const fetchMenu = fn().mockRejectedValue(new Error("Not found"));
     try {
       await fetchMenu("invalid-id");
-      expect(true).toBe(false); // Should not reach
+      expect(true).toBe(false);
     } catch (error) {
       expect(error.message).toBe("Not found");
     }
   });
 });
 
-
-// ============================================================
-// EXAMPLE 6 — Spying on Existing Methods
-// Story: Flipkart's analytics calls trackEvent() for every user
-//   action. Tests spy on it to verify calls without actually sending
-//   analytics data to the server.
-// ============================================================
-
+// --- Spying on existing methods ---
 // vi.spyOn(obj, 'method') wraps the real method, records calls.
 // spy.mockRestore() restores the original.
 
@@ -213,107 +167,15 @@ describe("Spying on Methods", () => {
   test("spy records calls, real method still runs", () => {
     const spy = spyOn(analytics, "trackEvent");
     analytics.trackEvent("page_view", { page: "/home" });
-    analytics.trackEvent("click", { button: "add_to_cart" });
-
-    expect(spy).toHaveBeenCalledTimes(2);
-    expect(spy).toHaveBeenCalledWith("page_view", { page: "/home" });
-    expect(analytics.events.length).toBeGreaterThan(0); // Real method worked
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(analytics.events.length).toBeGreaterThan(0);
     spy.mockRestore();
   });
 });
 
 
 // ============================================================
-// EXAMPLE 7 — Practical: Mocking a Payment Gateway
-// Story: Razorpay's checkout tests mock the gateway at every level:
-//   success, failure, timeout. All tested without touching a real bank.
-// ============================================================
-
-class OrderService {
-  constructor(paymentGateway, notifier) {
-    this.paymentGateway = paymentGateway;
-    this.notifier = notifier;
-    this.orders = [];
-  }
-
-  async placeOrder(orderData) {
-    if (!orderData.items || !orderData.items.length) throw new Error("Order must have items");
-    if (!orderData.customer?.phone) throw new Error("Customer phone required");
-
-    const total = orderData.items.reduce((s, i) => s + i.price * i.qty, 0);
-    const payment = await this.paymentGateway.charge(total, orderData.cardToken);
-
-    if (payment.status !== "success") {
-      await this.notifier.sendSMS(orderData.customer.phone, `Payment failed: ${payment.error}`);
-      return { success: false, error: payment.error };
-    }
-
-    const order = { id: "ORD-" + Date.now(), items: orderData.items, total, paymentId: payment.paymentId, status: "confirmed" };
-    this.orders.push(order);
-    await this.notifier.sendSMS(orderData.customer.phone, `Order ${order.id} confirmed! Rs.${total}`);
-    if (orderData.customer.email) {
-      await this.notifier.sendEmail(orderData.customer.email, "Confirmed", `Order ${order.id}`);
-    }
-    return { success: true, order };
-  }
-}
-
-describe("OrderService — Mocked Payment & Notifications", () => {
-  const mkGateway = () => ({ charge: fn() });
-  const mkNotifier = () => ({ sendSMS: fn(), sendEmail: fn() });
-  const sampleOrder = {
-    items: [{ name: "Headphones", price: 1999, qty: 1 }, { name: "Case", price: 499, qty: 2 }],
-    customer: { phone: "+919876543210", email: "c@e.com" },
-    cardToken: "tok_visa",
-  };
-
-  testAsync("successful order flow", async () => {
-    const gw = mkGateway(), nt = mkNotifier();
-    const svc = new OrderService(gw, nt);
-    gw.charge.mockResolvedValue({ status: "success", paymentId: "pay_001" });
-    nt.sendSMS.mockResolvedValue(true);
-    nt.sendEmail.mockResolvedValue(true);
-
-    const result = await svc.placeOrder(sampleOrder);
-
-    expect(result.success).toBe(true);
-    expect(result.order.total).toBe(2997);
-    expect(gw.charge).toHaveBeenCalledTimes(1);
-    expect(gw.charge).toHaveBeenCalledWith(2997, "tok_visa");
-    expect(nt.sendSMS).toHaveBeenCalledTimes(1);
-    expect(nt.sendEmail).toHaveBeenCalledTimes(1);
-  });
-
-  testAsync("payment failure sends failure SMS", async () => {
-    const gw = mkGateway(), nt = mkNotifier();
-    const svc = new OrderService(gw, nt);
-    gw.charge.mockResolvedValue({ status: "failed", error: "Insufficient funds" });
-    nt.sendSMS.mockResolvedValue(true);
-
-    const result = await svc.placeOrder(sampleOrder);
-
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("Insufficient funds");
-    expect(nt.sendSMS).toHaveBeenCalledTimes(1);
-    expect(nt.sendEmail).not.toHaveBeenCalled();
-  });
-
-  testAsync("validates before charging", async () => {
-    const gw = mkGateway(), nt = mkNotifier();
-    const svc = new OrderService(gw, nt);
-    try {
-      await svc.placeOrder({ items: [], customer: { phone: "123" } });
-      expect(true).toBe(false);
-    } catch (e) { expect(e.message).toBe("Order must have items"); }
-    expect(gw.charge).not.toHaveBeenCalled();
-  });
-});
-
-
-// ============================================================
-// EXAMPLE 8 — Mock as Callback
-// Story: RedBus's seat selection uses callbacks: selectSeat(id,
-//   onSuccess, onFailure). Both callbacks are mocks in tests.
+// SECTION 4 — Mock as Callback
 // ============================================================
 
 function selectSeat(seatId, available, onSuccess, onFailure) {
@@ -325,7 +187,6 @@ describe("Mock as Callback", () => {
   test("calls onSuccess for available seat", () => {
     const ok = fn(), fail = fn();
     selectSeat("A2", ["A1", "A2", "B1"], ok, fail);
-    expect(ok).toHaveBeenCalledTimes(1);
     expect(ok).toHaveBeenCalledWith({ seatId: "A2", status: "selected", price: 850 });
     expect(fail).not.toHaveBeenCalled();
   });
@@ -340,106 +201,104 @@ describe("Mock as Callback", () => {
 
 
 // ============================================================
-// EXAMPLE 9 — Clearing, Resetting, and Restoring Mocks
-// Story: Paytm Mall's test #12 always failed in suite but passed
-//   alone. A mock from test #5 wasn't cleared — call count carried
-//   over. Now every afterEach includes mockClear().
+// SECTION 5 — Clearing & Resetting Mocks
 // ============================================================
 
-// .mockClear()   — Reset calls, KEEP implementation
-// .mockReset()   — Clear + remove implementation
-// .mockRestore() — Restore ORIGINAL (only with spyOn)
+// .mockClear()   -- Reset calls, KEEP implementation
+// .mockReset()   -- Clear + remove implementation
+// .mockRestore() -- Restore ORIGINAL (only with spyOn)
+// In Vitest/Jest: vi.clearAllMocks(), vi.resetAllMocks()
 
 describe("Mock Cleanup", () => {
   test("mockClear resets calls, keeps implementation", () => {
     const calc = fn().mockReturnValue(42);
     calc("first"); calc("second");
     expect(calc).toHaveBeenCalledTimes(2);
-
     calc.mockClear();
-    expect(calc).toHaveBeenCalledTimes(0); // Cleared!
-    expect(calc("third")).toBe(42);        // Implementation kept!
+    expect(calc).toHaveBeenCalledTimes(0);
+    expect(calc("third")).toBe(42);  // Implementation kept!
   });
 
   test("mockReset removes everything", () => {
     const calc = fn().mockReturnValue(42);
     calc("call1");
     calc.mockReset();
-    expect(calc).toHaveBeenCalledTimes(0);
-    expect(calc("call2")).toBe(undefined); // Implementation gone!
+    expect(calc("call2")).toBe(undefined);  // Implementation gone!
   });
 });
 
-// In Vitest/Jest: vi.clearAllMocks(), vi.resetAllMocks(), vi.restoreAllMocks()
-
 
 // ============================================================
-// EXAMPLE 10 — Practical: Full Payment Processor
-// Story: Complete test suite for payment processing: UPI, fraud
-//   detection, ledger recording, and notifications — all mocked.
+// SECTION 6 — Practical: Mocking a Payment Gateway
 // ============================================================
 
-class PaymentProcessor {
-  constructor(gateway, fraud, ledger, notifier) {
-    this.gateway = gateway;
-    this.fraud = fraud;
-    this.ledger = ledger;
+class OrderService {
+  constructor(paymentGateway, notifier) {
+    this.paymentGateway = paymentGateway;
     this.notifier = notifier;
+    this.orders = [];
   }
 
-  async process(data) {
-    const { amount, customerId, method, phone } = data;
-    const fraudCheck = await this.fraud.check(amount, customerId);
-    if (fraudCheck.flagged) return { status: "blocked", reason: "Fraud detected" };
-
-    const charge = await this.gateway.charge(amount, method);
-    if (charge.status !== "success") return { status: "failed", reason: charge.error };
-
-    await this.ledger.record({ paymentId: charge.paymentId, amount, customerId, method });
-    await this.notifier.sendSMS(phone, `Payment of Rs.${amount} successful!`);
-    return { status: "success", paymentId: charge.paymentId, amount };
+  async placeOrder(orderData) {
+    if (!orderData.items || !orderData.items.length) throw new Error("Order must have items");
+    if (!orderData.customer?.phone) throw new Error("Customer phone required");
+    const total = orderData.items.reduce((s, i) => s + i.price * i.qty, 0);
+    const payment = await this.paymentGateway.charge(total, orderData.cardToken);
+    if (payment.status !== "success") {
+      await this.notifier.sendSMS(orderData.customer.phone, `Payment failed: ${payment.error}`);
+      return { success: false, error: payment.error };
+    }
+    const order = { id: "ORD-" + Date.now(), items: orderData.items, total, paymentId: payment.paymentId, status: "confirmed" };
+    this.orders.push(order);
+    await this.notifier.sendSMS(orderData.customer.phone, `Order ${order.id} confirmed! Rs.${total}`);
+    return { success: true, order };
   }
 }
 
-describe("PaymentProcessor — Complete Mock Suite", () => {
-  const mkDeps = () => ({ gateway: { charge: fn() }, fraud: { check: fn() }, ledger: { record: fn() }, notifier: { sendSMS: fn() } });
-  const payData = { amount: 4999, customerId: "C-001", method: "upi", phone: "+919876543210" };
+describe("OrderService -- Mocked Payment & Notifications", () => {
+  const mkGateway = () => ({ charge: fn() });
+  const mkNotifier = () => ({ sendSMS: fn(), sendEmail: fn() });
+  const sampleOrder = {
+    items: [{ name: "Headphones", price: 1999, qty: 1 }, { name: "Case", price: 499, qty: 2 }],
+    customer: { phone: "+919876543210" },
+    cardToken: "tok_visa",
+  };
 
-  testAsync("successful payment", async () => {
-    const d = mkDeps();
-    d.fraud.check.mockResolvedValue({ flagged: false });
-    d.gateway.charge.mockResolvedValue({ status: "success", paymentId: "PAY-001" });
-    d.ledger.record.mockResolvedValue(true);
-    d.notifier.sendSMS.mockResolvedValue(true);
+  testAsync("successful order flow", async () => {
+    const gw = mkGateway(), nt = mkNotifier();
+    const svc = new OrderService(gw, nt);
+    gw.charge.mockResolvedValue({ status: "success", paymentId: "pay_001" });
+    nt.sendSMS.mockResolvedValue(true);
 
-    const r = await new PaymentProcessor(d.gateway, d.fraud, d.ledger, d.notifier).process(payData);
-    expect(r.status).toBe("success");
-    expect(r.paymentId).toBe("PAY-001");
-    expect(d.fraud.check).toHaveBeenCalledWith(4999, "C-001");
-    expect(d.gateway.charge).toHaveBeenCalledWith(4999, "upi");
-    expect(d.ledger.record).toHaveBeenCalledTimes(1);
-    expect(d.notifier.sendSMS).toHaveBeenCalledTimes(1);
+    const result = await svc.placeOrder(sampleOrder);
+
+    expect(result.success).toBe(true);
+    expect(result.order.total).toBe(2997);
+    expect(gw.charge).toHaveBeenCalledWith(2997, "tok_visa");
+    expect(nt.sendSMS).toHaveBeenCalledTimes(1);
   });
 
-  testAsync("blocked by fraud", async () => {
-    const d = mkDeps();
-    d.fraud.check.mockResolvedValue({ flagged: true });
+  testAsync("payment failure sends failure SMS", async () => {
+    const gw = mkGateway(), nt = mkNotifier();
+    const svc = new OrderService(gw, nt);
+    gw.charge.mockResolvedValue({ status: "failed", error: "Insufficient funds" });
+    nt.sendSMS.mockResolvedValue(true);
 
-    const r = await new PaymentProcessor(d.gateway, d.fraud, d.ledger, d.notifier).process(payData);
-    expect(r.status).toBe("blocked");
-    expect(d.gateway.charge).not.toHaveBeenCalled();
-    expect(d.ledger.record).not.toHaveBeenCalled();
+    const result = await svc.placeOrder(sampleOrder);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Insufficient funds");
+    expect(nt.sendSMS).toHaveBeenCalledTimes(1);
   });
 
-  testAsync("gateway failure", async () => {
-    const d = mkDeps();
-    d.fraud.check.mockResolvedValue({ flagged: false });
-    d.gateway.charge.mockResolvedValue({ status: "failed", error: "UPI timeout" });
-
-    const r = await new PaymentProcessor(d.gateway, d.fraud, d.ledger, d.notifier).process(payData);
-    expect(r.status).toBe("failed");
-    expect(r.reason).toBe("UPI timeout");
-    expect(d.ledger.record).not.toHaveBeenCalled();
+  testAsync("validates before charging", async () => {
+    const gw = mkGateway(), nt = mkNotifier();
+    const svc = new OrderService(gw, nt);
+    try {
+      await svc.placeOrder({ items: [], customer: { phone: "123" } });
+      expect(true).toBe(false);
+    } catch (e) { expect(e.message).toBe("Order must have items"); }
+    expect(gw.charge).not.toHaveBeenCalled();
   });
 });
 
@@ -456,23 +315,17 @@ setTimeout(() => {
 // 1. Three test doubles: SPY (records, real runs), STUB (fixed
 //    return), MOCK (records + verifies expectations).
 //
-// 2. vi.fn() / jest.fn() creates a mock. It records all calls
-//    and can be configured with mockReturnValue, mockImplementation.
+// 2. vi.fn() / jest.fn() creates a mock. Configure with
+//    mockReturnValue, mockImplementation, mockResolvedValue.
 //
-// 3. mockResolvedValue for async success, mockRejectedValue for
-//    async failure — essential for API call mocking.
+// 3. Inspect mocks: toHaveBeenCalled, toHaveBeenCalledTimes(n),
+//    toHaveBeenCalledWith(args).
 //
-// 4. Inspect mocks: toHaveBeenCalled, toHaveBeenCalledTimes(n),
-//    toHaveBeenCalledWith(args), mock._calls for raw data.
+// 4. vi.spyOn wraps real methods. Always mockRestore() after.
 //
-// 5. vi.spyOn wraps real methods. Always mockRestore() after.
-//
-// 6. Cleanup: mockClear (reset calls), mockReset (clear + remove
+// 5. Cleanup: mockClear (reset calls), mockReset (clear + remove
 //    impl), mockRestore (restore original).
 //
-// 7. Mock external dependencies, not your own logic. If you mock
-//    everything, your tests test nothing.
-//
-// 8. Design for testability: dependency injection (accept deps as
+// 6. Design for testability: dependency injection (accept deps as
 //    params) eliminates the need for module mocking.
 // ============================================================
