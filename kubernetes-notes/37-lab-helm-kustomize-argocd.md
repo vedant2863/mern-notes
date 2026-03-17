@@ -21,7 +21,7 @@
 ## Cluster Setup
 
 ```bash
-# Step 1: Create a kind cluster
+# Step 1: Create a kind cluster with 3 nodes
 cat <<EOF | kind create cluster --name helm-gitops-lab --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -38,27 +38,13 @@ nodes:
   - role: worker
 EOF
 
-# EXPECTED OUTPUT:
-# Creating cluster "helm-gitops-lab" ...
-#  ✓ Ensuring node image (kindest/node:v1.31.0) 🖼
-#  ✓ Preparing nodes 📦 📦 📦
-#  ✓ Writing configuration 📜
-#  ✓ Starting control-plane 🕹️
-#  ✓ Installing CNI 🔌
-#  ✓ Installing StorageClass 💾
-#  ✓ Joining worker nodes 🚜
-# Set kubectl context to "kind-helm-gitops-lab"
+# EXPECTED OUTPUT: Creating cluster "helm-gitops-lab" ... Set kubectl context to "kind-helm-gitops-lab"
 
 # Step 2: Verify cluster
 kubectl get nodes
+# EXPECTED: 3 nodes (1 control-plane, 2 workers) all in Ready state
 
-# EXPECTED OUTPUT:
-# NAME                             STATUS   ROLES           AGE   VERSION
-# helm-gitops-lab-control-plane    Ready    control-plane   60s   v1.31.0
-# helm-gitops-lab-worker           Ready    <none>          45s   v1.31.0
-# helm-gitops-lab-worker2          Ready    <none>          45s   v1.31.0
-
-# Step 3: Create a working directory for this lab
+# Step 3: Create a working directory
 mkdir -p /tmp/helm-gitops-lab && cd /tmp/helm-gitops-lab
 ```
 
@@ -72,31 +58,16 @@ mkdir -p /tmp/helm-gitops-lab && cd /tmp/helm-gitops-lab
 # Create a new Helm chart
 cd /tmp/helm-gitops-lab
 helm create webapp
-
-# EXPECTED OUTPUT:
-# Creating webapp
+# EXPECTED OUTPUT: Creating webapp
 
 # Explore the generated structure
 find webapp/ -type f
-
-# EXPECTED OUTPUT:
-# webapp/Chart.yaml
-# webapp/values.yaml
-# webapp/.helmignore
-# webapp/templates/NOTES.txt
-# webapp/templates/_helpers.tpl
-# webapp/templates/deployment.yaml
-# webapp/templates/hpa.yaml
-# webapp/templates/ingress.yaml
-# webapp/templates/service.yaml
-# webapp/templates/serviceaccount.yaml
-# webapp/templates/tests/test-connection.yaml
+# EXPECTED: Chart.yaml, values.yaml, .helmignore, templates/ (deployment, service, ingress, hpa, etc.)
 ```
 
 ### Step 2: Customize Chart.yaml
 
 ```bash
-# Replace the default Chart.yaml with our custom one
 cat > webapp/Chart.yaml <<'EOF'
 apiVersion: v2
 name: webapp
@@ -107,20 +78,10 @@ appVersion: "1.0.0"
 keywords:
   - web
   - demo
-  - lab
 maintainers:
   - name: Lab Student
     email: student@example.com
 EOF
-
-# Verify
-cat webapp/Chart.yaml
-
-# EXPECTED OUTPUT:
-# apiVersion: v2
-# name: webapp
-# description: A demo web application Helm chart for the lab
-# ...
 ```
 
 ### Step 3: Customize values.yaml
