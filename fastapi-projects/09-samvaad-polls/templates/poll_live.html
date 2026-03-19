@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samvaad - Live Poll</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        .poll-question {
+            font-size: 1.4em;
+            color: #222;
+            margin-bottom: 20px;
+        }
+        .option-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            background: white;
+            border-radius: 8px;
+            padding: 12px 16px;
+            cursor: pointer;
+            border: 2px solid #ddd;
+            transition: border-color 0.2s;
+        }
+        .option-row:hover { border-color: #4CAF50; }
+        .option-name { flex: 1; font-size: 1.1em; }
+        .vote-count {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-right: 12px;
+        }
+        .bar-container {
+            width: 150px;
+            height: 20px;
+            background: #eee;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            background: #4CAF50;
+            border-radius: 10px;
+            transition: width 0.4s ease;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+        .connected { background: #e8f5e9; color: #2e7d32; }
+        .disconnected { background: #ffebee; color: #c62828; }
+        .create-section {
+            margin-top: 40px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+        }
+        input, button {
+            padding: 10px 14px;
+            font-size: 1em;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin: 4px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #388E3C; }
+    </style>
+</head>
+<body>
+    <h1>Samvaad Polls</h1>
+    <p class="subtitle">IIT Bombay Fest - Live Polling</p>
+
+    <div id="poll-area" style="display:none;">
+        <p class="poll-question" id="question"></p>
+        <div id="options-container"></div>
+        <div id="status" class="status disconnected">Connecting...</div>
+    </div>
+
+    <div class="create-section" id="create-section">
+        <h3>Create a New Poll</h3><br>
+        <input type="text" id="new-question" placeholder="Your question" style="width:100%"><br>
+        <input type="text" id="new-options" placeholder="Options (comma separated)" style="width:100%"><br><br>
+        <button onclick="createPoll()">Create Poll</button>
+        <br><br>
+        <p>Or enter Poll ID: <input type="text" id="poll-id-input" placeholder="paste poll id">
+        <button onclick="joinPoll()">Join</button></p>
+    </div>
+
+    <script src="/static/poll.js"></script>
+</body>
+</html>

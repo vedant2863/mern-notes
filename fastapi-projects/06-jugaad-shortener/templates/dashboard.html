@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jugaad Shortener - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Jugaad URL Shortener</h1>
+        <p><a href="/create">Create New Short URL</a></p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Short Code</th>
+                    <th>Original URL</th>
+                    <th>Clicks</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for url in urls %}
+                <tr>
+                    <td><a href="/{{ url.short_code }}">{{ url.short_code }}</a></td>
+                    <td>{{ url.original_url }}</td>
+                    <td>{{ url.click_count }}</td>
+                    <td>{{ url.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+
+                {% if not urls %}
+                <tr>
+                    <td colspan="4">No URLs yet. Create one!</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Short URL</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Create Short URL</h1>
+        <p><a href="/dashboard">Back to Dashboard</a></p>
+
+        <form id="shorten-form">
+            <label for="url">Paste your long URL:</label>
+            <input type="url" id="url" name="url" placeholder="https://example.com/very/long/path" required>
+            <button type="submit">Shorten It!</button>
+        </form>
+
+        <div id="result" style="display:none;">
+            <h3>Your Short URL:</h3>
+            <p><a id="short-link" href="#" target="_blank"></a></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("shorten-form");
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url = document.getElementById("url").value;
+
+            const response = await fetch("/shorten", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({original_url: url}),
+            });
+
+            const data = await response.json();
+            const shortUrl = window.location.origin + "/" + data.short_code;
+
+            const link = document.getElementById("short-link");
+            link.href = shortUrl;
+            link.textContent = shortUrl;
+            document.getElementById("result").style.display = "block";
+        });
+    </script>
+</body>
+</html>

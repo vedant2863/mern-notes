@@ -1,0 +1,49 @@
+CHAPTER 5: FUNDAMENTAL RIGHTS AND DIRECTIVE PRINCIPLES
+
+5.1 Introduction to Fundamental Rights
+
+The Fundamental Rights are enshrined in Part III of the Indian Constitution, from Articles 12 to 35. These rights are justiciable, meaning citizens can approach the courts if these rights are violated. Dr. B.R. Ambedkar called them the most important part of the Constitution.
+
+The original Constitution provided seven Fundamental Rights. However, the Right to Property was removed from the list of Fundamental Rights by the 44th Constitutional Amendment Act, 1978. Currently, there are six Fundamental Rights.
+
+5.2 The Six Fundamental Rights
+
+1. Right to Equality (Articles 14-18): Article 14 guarantees equality before law and equal protection of laws. Article 15 prohibits discrimination on grounds of religion, race, caste, sex, or place of birth. Article 16 provides equality of opportunity in public employment. Article 17 abolishes untouchability. Article 18 abolishes titles.
+
+2. Right to Freedom (Articles 19-22): Article 19 guarantees six freedoms: speech and expression, assembly, association, movement, residence, and profession. Article 20 provides protection against conviction for offences. Article 21 guarantees protection of life and personal liberty. Article 21A provides right to education for children aged 6-14. Article 22 provides protection against arbitrary arrest.
+
+3. Right against Exploitation (Articles 23-24): Article 23 prohibits traffic in human beings and forced labor. Article 24 prohibits employment of children below 14 years in factories, mines, and hazardous occupations.
+
+4. Right to Freedom of Religion (Articles 25-28): Article 25 guarantees freedom of conscience and free profession, practice, and propagation of religion. Article 26 provides freedom to manage religious affairs. Article 27 prohibits taxation for promotion of any religion. Article 28 provides freedom from attending religious instruction in certain institutions.
+
+5. Cultural and Educational Rights (Articles 29-30): Article 29 protects the interests of minorities. Article 30 gives minorities the right to establish and administer educational institutions.
+
+6. Right to Constitutional Remedies (Article 32): Dr. Ambedkar called Article 32 the "heart and soul" of the Constitution. It empowers citizens to approach the Supreme Court directly for enforcement of Fundamental Rights. The Supreme Court can issue five types of writs: Habeas Corpus, Mandamus, Prohibition, Certiorari, and Quo Warranto.
+
+5.3 Directive Principles of State Policy
+
+The Directive Principles of State Policy (DPSP) are enumerated in Part IV of the Constitution, from Articles 36 to 51. These are borrowed from the Irish Constitution. Unlike Fundamental Rights, DPSPs are non-justiciable — they cannot be enforced by courts.
+
+However, they are fundamental in the governance of the country. Article 37 states that DPSPs are fundamental in governance and it shall be the duty of the State to apply these principles in making laws.
+
+5.4 Classification of DPSPs
+
+DPSPs can be classified into three categories:
+
+Socialistic Principles: Article 38 directs the State to secure social order for promotion of welfare. Article 39 directs policy towards equal distribution of resources. Article 39A provides for free legal aid. Article 41 provides right to work, education, and public assistance. Article 42 provides for just and humane conditions of work. Article 43 provides for living wage for workers. Article 43A provides for participation of workers in management.
+
+Gandhian Principles: Article 40 directs organization of village panchayats. Article 43 promotes cottage industries. Article 46 promotes educational and economic interests of SC/ST. Article 47 directs raising of nutrition level and prohibition of intoxicating drinks. Article 48 directs organization of agriculture and animal husbandry.
+
+Liberal-Intellectual Principles: Article 44 directs the State to secure Uniform Civil Code. Article 45 provides for early childhood care and education. Article 48 provides for protection of environment. Article 48A directs protection and improvement of environment. Article 49 directs protection of monuments. Article 50 directs separation of judiciary from executive. Article 51 directs promotion of international peace.
+
+5.5 Conflict between Fundamental Rights and DPSPs
+
+The relationship between Fundamental Rights and DPSPs has been a subject of judicial debate. In the Champakam Dorairajan case (1951), the Supreme Court held that Fundamental Rights prevail over DPSPs. However, through various amendments and judicial pronouncements, a balance has been struck.
+
+The Minerva Mills case (1980) established the doctrine of harmonious construction — both Fundamental Rights and DPSPs are equally important and should be balanced. The Court held that the Constitution is founded on the bedrock of balance between Fundamental Rights and DPSPs.
+
+5.6 Key Constitutional Amendments
+
+The 1st Amendment (1951) added Articles 15(4) and 19(6) to enable the State to make special provisions for backward classes. The 25th Amendment (1971) added Article 31C to protect laws implementing DPSPs. The 42nd Amendment (1976) extended the protection of Article 31C to all DPSPs. The 44th Amendment (1978) removed the Right to Property from Fundamental Rights. The 86th Amendment (2002) added Article 21A for the Right to Education.
+
+These amendments reflect the evolving nature of the Indian Constitution and the constant effort to balance individual rights with collective welfare.

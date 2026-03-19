@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saathi — Your Finance Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="chat-container">
+        <header class="chat-header">
+            <h1>Saathi</h1>
+            <p>Your AI Finance Assistant</p>
+            <span id="status" class="status disconnected">Disconnected</span>
+        </header>
+
+        <div id="messages" class="messages">
+            <div class="message assistant">
+                <div class="message-content">
+                    Hi! I'm Saathi, your personal finance assistant.
+                    I can help you track expenses, check spending summaries,
+                    convert currencies, and more. Try asking me something!
+                </div>
+            </div>
+        </div>
+
+        <div id="tool-indicator" class="tool-indicator" style="display: none;">
+            <span class="spinner"></span>
+            <span id="tool-text">Thinking...</span>
+        </div>
+
+        <form id="chat-form" class="chat-input">
+            <input
+                type="text"
+                id="message-input"
+                placeholder="Ask me anything about your finances..."
+                autocomplete="off"
+            />
+            <button type="submit" id="send-btn">Send</button>
+        </form>
+    </div>
+
+    <script src="/static/chat.js"></script>
+</body>
+</html>

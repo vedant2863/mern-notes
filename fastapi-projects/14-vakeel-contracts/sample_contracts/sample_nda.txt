@@ -1,0 +1,126 @@
+NON-DISCLOSURE AGREEMENT
+
+This Non-Disclosure Agreement ("Agreement") is entered into as of January 15, 2025
+by and between:
+
+DISCLOSING PARTY: TechVentures Private Limited, a company incorporated under the
+laws of India, having its registered office at 42 Bandra Kurla Complex, Mumbai,
+Maharashtra 400051 ("Company")
+
+RECEIVING PARTY: InnoSoft Solutions LLP, a limited liability partnership registered
+under the laws of India, having its registered office at 15 Koregaon Park, Pune,
+Maharashtra 411001 ("Recipient")
+
+WHEREAS, the Company possesses certain confidential and proprietary information
+relating to its business operations, technology, and strategic plans; and
+
+WHEREAS, the Recipient desires to receive certain confidential information for the
+purpose of evaluating a potential business collaboration between the parties;
+
+NOW, THEREFORE, in consideration of the mutual covenants herein, the parties agree
+as follows:
+
+1. DEFINITION OF CONFIDENTIAL INFORMATION
+
+"Confidential Information" shall mean all information, whether written, oral, or in
+electronic form, disclosed by the Company to the Recipient, including but not limited
+to: trade secrets, business plans, financial data, customer lists, technical
+specifications, software source code, algorithms, product roadmaps, marketing
+strategies, and employee information.
+
+Confidential Information shall NOT include information that:
+(a) Is or becomes publicly available through no fault of the Recipient;
+(b) Was in the Recipient's possession prior to disclosure;
+(c) Is independently developed by the Recipient without use of Confidential Information;
+(d) Is received from a third party without restriction on disclosure.
+
+2. OBLIGATIONS OF THE RECIPIENT
+
+The Recipient agrees to:
+(a) Hold all Confidential Information in strict confidence;
+(b) Not disclose Confidential Information to any third party without prior written
+    consent of the Company;
+(c) Use Confidential Information solely for the Purpose defined herein;
+(d) Limit access to Confidential Information to employees who have a need to know;
+(e) Ensure all employees who access Confidential Information sign individual NDAs;
+(f) Take all reasonable measures to protect the secrecy of Confidential Information,
+    using at least the same degree of care used to protect its own confidential
+    information.
+
+3. TERM AND DURATION
+
+This Agreement shall be effective from the date first written above and shall remain
+in effect for a period of THREE (3) years from the date of execution. The obligations
+of confidentiality shall survive termination of this Agreement for an additional
+period of FIVE (5) years.
+
+4. NON-COMPETE CLAUSE
+
+During the term of this Agreement and for a period of TWO (2) years following its
+termination, the Recipient shall not directly or indirectly:
+(a) Engage in any business that competes with the Company within the territory of India;
+(b) Solicit or hire any employee of the Company;
+(c) Approach any client or customer of the Company for competing purposes.
+
+5. INTELLECTUAL PROPERTY
+
+All Confidential Information remains the exclusive property of the Company. This
+Agreement does not grant the Recipient any license or rights to the Company's
+intellectual property, patents, trademarks, or copyrights.
+
+6. RETURN OF MATERIALS
+
+Upon termination of this Agreement or upon request by the Company, the Recipient
+shall promptly return or destroy all materials containing Confidential Information,
+including all copies, notes, and summaries thereof, and shall provide written
+certification of such destruction.
+
+7. REMEDIES
+
+The Recipient acknowledges that any breach of this Agreement may cause irreparable
+harm to the Company. In the event of a breach, the Company shall be entitled to
+seek injunctive relief and specific performance, in addition to any other remedies
+available at law or in equity, without the necessity of proving actual damages.
+
+8. INDEMNIFICATION
+
+The Recipient shall indemnify, defend, and hold harmless the Company from any and
+all claims, losses, damages, liabilities, and expenses arising from the Recipient's
+breach of this Agreement, including reasonable attorney's fees.
+
+9. GOVERNING LAW AND JURISDICTION
+
+This Agreement shall be governed by and construed in accordance with the laws of
+India. Any disputes arising under this Agreement shall be subject to the exclusive
+jurisdiction of the courts in Mumbai, Maharashtra.
+
+10. LIMITATION OF LIABILITY
+
+The Company's total liability under this Agreement shall not exceed the sum of
+INR 10,00,000 (Rupees Ten Lakhs only). In no event shall the Company be liable
+for any indirect, incidental, consequential, or punitive damages.
+
+11. AMENDMENT AND WAIVER
+
+This Agreement may not be amended or modified except by a written instrument signed
+by both parties. The failure of either party to enforce any provision of this
+Agreement shall not constitute a waiver of such provision.
+
+12. ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between the parties concerning the
+subject matter hereof and supersedes all prior agreements, understandings, and
+negotiations.
+
+IN WITNESS WHEREOF, the parties have executed this Agreement as of the date first
+written above.
+
+For TechVentures Private Limited:
+Name: Rajesh Kumar
+Title: Chief Executive Officer
+Date: January 15, 2025
+
+For InnoSoft Solutions LLP:
+Name: Priya Sharma
+Title: Managing Partner
+Date: January 15, 2025
